@@ -107,6 +107,7 @@ def main():
         for entry in entries:
             if entry.get("id"):
                 seen.append(entry["id"])
+        send_telegram("Redbox News Bot is connected. Monitoring @" + USERNAME + " for new posts.")
         save_state(seen)
         print("Initial feed baseline saved. New posts will be forwarded from the next check.")
         return
