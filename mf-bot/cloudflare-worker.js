@@ -27,7 +27,7 @@ export default {
     const isGroup = msg.chat.type === "group" || msg.chat.type === "supergroup";
     const botUsername = (env.BOT_USERNAME || "").toLowerCase();
     let query = text;
-    if (isGroup) {
+    if (isGroup && !callback) {
       if (/^\/mf(?:@\w+)?\s+/i.test(query)) query = query.replace(/^\/mf(?:@\w+)?\s+/i, "");
       else if (botUsername && query.toLowerCase().includes("@" + botUsername)) query = query.replace(new RegExp("@" + botUsername, "ig"), "").trim();
       else return new Response("Not addressed to bot");
