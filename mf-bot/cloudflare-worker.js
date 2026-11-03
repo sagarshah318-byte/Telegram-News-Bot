@@ -9,9 +9,21 @@ export default {
       return new Response("Unauthorized", { status: 401 });
     }
     const update = await request.json();
-    const msg = update.message || update.edited_message;
-    if (!msg || !msg.text || !msg.chat) return new Response("Ignored");
-    const text = msg.text.trim();
+    const callback = update.callback_query;
+    const msg = update.message || update.edited_message || (callback && callback.message);
+    if (!msg || !msg.chat) return new Response("Ignored");
+    let text = msg.text ? msg.text.trim() : "";
+    if (callback && callback.data && callback.data.startsWith("MFSEL:")) {
+      const code = callback.data.slice(6).trim();
+      if (!/^\d+$/.test(code)) return new Response("Invalid selection");
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callback_query_id: callback.id, text: "Fund selected. Fetching details..." })
+      });
+      await telegramSend(env, msg.chat.id, "Fetching the selected fund details...");
+      text = code;
+    } else if (callback) return new Response("Ignored callback");
+    if (!text) return new Response("Ignored");
     const isGroup = msg.chat.type === "group" || msg.chat.type === "supergroup";
     const botUsername = (env.BOT_USERNAME || "").toLowerCase();
     let query = text;
