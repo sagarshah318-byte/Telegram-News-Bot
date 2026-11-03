@@ -181,9 +181,7 @@ def main():
     print(f"Qualifying opportunities (Spread >= {THRESHOLD:.1f}%): {len(opportunities)}")
     print(f"New opportunities to alert: {len(fresh)}")
 
-    for row in fresh:
-        telegram_send(format_alert(row))
-        print(f"Telegram alert sent: {row['month']} {row['symbol']} {row['spread_per']:.2f}%")
+    send_batched_alerts(fresh)
 
     # Re-alert only after an opportunity drops below 3% and later qualifies again.
     state["active_opportunities"] = sorted(current_active)
