@@ -1,5 +1,4 @@
 import csv
-import os
 import re
 import sys
 from pathlib import Path
@@ -37,7 +36,8 @@ def main():
         table_rows = page.locator("table tr")
         print(f"VISIBLE_TABLE_ROW_COUNT={table_rows.count()}")
         for i in range(min(table_rows.count(), 8)):
-            print(f"TABLE_ROW_{i}={re.sub(r'\\s+', ' ', table_rows.nth(i).inner_text()).strip()}")
+            row_text = re.sub(r"\\s+", " ", table_rows.nth(i).inner_text()).strip()
+            print(f"TABLE_ROW_{i}={row_text}")
 
         # Use NSE's own on-page CSV download control. Do not call hidden/private APIs.
         download_control = page.get_by_text("Download (.csv)", exact=True)
