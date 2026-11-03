@@ -20,7 +20,7 @@ def telegram_send(text):
         result=json.loads(r.read())
     if not result.get("ok"): raise RuntimeError("Telegram sendMessage failed")
 
-def clean(s): return re.sub(r"\\s+"," ",unescape(s or "")).strip()
+def clean(s): return re.sub(r"\s+"," ",unescape(s or "")).strip()
 def fmt(v,n=2):
     try: return f"{float(v):,.{n}f}"
     except Exception: return "Not available"
@@ -36,12 +36,28 @@ def amfi_rows():
 
 def find_scheme(rows,q):
     q=clean(q).lower()
-    rows=[r for r in rows if "regular" in r["name"].lower() and "growth" in r["name"].lower()]
-    exact=[r for r in rows if q in r["name"].lower()]
-    if exact: return exact[0], exact[:8]
+    eligible=[r for r in rows if "regular" in r["name"].lower() and "growth" in r["name"].lower()]
     words=[w for w in re.findall(r"[a-z0-9]+",q) if len(w)>2]
-    matches=[r for r in rows if words and all(w in r["name"].lower() for w in words)]
-    return (matches[0] if len(matches)==1 else None),matches[:8]
+    def matches_words(name):
+        tokens=re.sub(r"[^a-z0-9]+"," ",name.lower()).split()
+        return bool(words) and all(w in tokens for w in words)
+    matches=[r for r in eligible if matches_words(r["name"])]
+    if len(matches)==1: return matches[0],matches
+    if len(matches)>1:
+        matches.sort(key=lambda r: len(r["name"]))
+        return matches[0],matches[:8]
+    try:
+        found=json.loads(fetch("https://api.mfapi.in/mf/search?q="+urllib.parse.quote(q)))
+        candidates=[]
+        for item in found if isinstance(found,list) else []:
+            name=clean(item.get("schemeName",""))
+            if "regular" in name.lower() and "growth" in name.lower() and matches_words(name):
+                candidates.append({"code":str(item.get("schemeCode","")),"name":name,"nav":"","date":""})
+        if len(candidates)==1: return candidates[0],candidates
+        return None,candidates[:8]
+    except Exception as e:
+        print("MFAPI search fallback failed:",repr(e))
+        return None,[]
 
 def trailing(code):
     data=json.loads(fetch(f"https://api.mfapi.in/mf/{urllib.parse.quote(code)}"))
