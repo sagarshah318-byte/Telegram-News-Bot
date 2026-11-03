@@ -1,25 +1,32 @@
 # REDBOXINDIA → Telegram
 
-This GitHub Actions bot checks the X account [@REDBOXINDIA](https://x.com/REDBOXINDIA) hourly from 8:00 AM to 11:00 PM India time and forwards new posts to a Telegram chat.
+This bot checks the public X account [@REDBOXINDIA](https://x.com/REDBOXINDIA) hourly from 8:00 AM to 11:00 PM India time and forwards new feed entries to Telegram.
 
-Posts made overnight are picked up at the next 8:00 AM run. The bot stores the last successfully delivered post ID in `redbox-bot/state.json` to avoid normal duplicate deliveries.
+## Free feed method
 
-## Required GitHub Actions secrets
+The bot uses public RSSHub instances instead of the paid X API. It tries these public feed providers in order:
 
-In **Settings → Secrets and variables → Actions → New repository secret**, add:
+1. https://rsshub.app
+2. https://rsshub.stsecurity.moe
+3. https://rsshub.axisnetcloud.com
 
-- `X_BEARER_TOKEN`: X API v2 Bearer Token
+Public RSS services can be rate-limited, unavailable, or blocked by X. RSS may omit some posts or media, and the feed may expose only a limited recent history. This is a free best-effort method, not a guarantee that every X post will always be captured.
+
+## GitHub Actions secrets
+
+In **Settings → Secrets and variables → Actions**, add:
+
 - `TELEGRAM_BOT_TOKEN`: token from Telegram's @BotFather
 - `TELEGRAM_CHAT_ID`: your private Telegram chat ID
 
-Never put these credentials in source files or commit them to this repository.
+No X API token is required.
+
+## Schedule
+
+The workflow runs hourly from 08:00 through 23:00 India time. Posts published overnight are picked up at the next 08:00 run, provided the RSS feed still contains them.
 
 ## First run
 
-The first run records the latest available post as the starting point. It does not send old timeline posts. Every newer post is forwarded on later runs.
+The first run saves the currently visible feed entries as a baseline and does not send older posts. New entries on later runs are forwarded oldest-first. Successfully delivered entry IDs are saved in `redbox-bot/state.json` to reduce duplicate messages.
 
-You can also start a run manually from **Actions → REDBOXINDIA to Telegram → Run workflow**.
-
-## Access requirements
-
-The X API app must have read access to the user timeline endpoint. X API plan limits and pricing are controlled by X. The repository's GitHub Actions workflow needs permission to write repository contents so it can save the delivery cursor.
+You can also run it manually from **Actions → REDBOXINDIA to Telegram → Run workflow**.
