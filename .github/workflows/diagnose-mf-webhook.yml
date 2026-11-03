@@ -2,6 +2,9 @@ name: Diagnose Mutual Fund Telegram webhook
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/diagnose-mf-webhook.yml"
 
 permissions:
   contents: read
