@@ -7,9 +7,9 @@ permissions:
   contents: read
 
 jobs:
-  test-nse-csv:
+  inspect-nse-page:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,28 +17,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Playwright
+      - name: Fetch NSE SLBM page using HTTP/1.1
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install playwright
-          python -m playwright install --with-deps chromium
-      - name: Diagnose NSE page access over HTTP/1.1
-        run: |
-          set +e
+          mkdir -p artifacts
           curl -sS -L --http1.1 --max-time 60 \
             -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36" \
-            -o /tmp/nse_slbm_landing.html \
+            -o artifacts/nse_landing.html \
             -w "CURL_HTTP_STATUS=%{http_code} HTTP_VERSION=%{http_version} BYTES=%{size_download}\\n" \
             "https://www.nseindia.com/market-data/securities-lending-and-borrowing"
-          echo "CURL_EXIT_CODE=$?"
-          if [ -f /tmp/nse_slbm_landing.html ]; then head -c 500 /tmp/nse_slbm_landing.html; fi
-      - name: Open NSE and download the visible SLBM CSV
-        run: python slbm-bot/test_nse_csv.py
-      - name: Save downloaded CSV for inspection
+      - name: Inspect NSE HTML for SLBM data and CSV references
+        run: python slbm-bot/inspect_nse_html.py
+      - name: Save NSE page for inspection
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nse-slbm-csv-test
+          name: nse-slbm-page-inspection
           path: artifacts/*
           if-no-files-found: warn
           retention-days: 7
