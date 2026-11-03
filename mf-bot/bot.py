@@ -99,6 +99,33 @@ def trailing(code):
             out[years]=((endv/sv)**(1/actual)-1)*100
     return out,endd
 
+def amc_metadata(scheme_name):
+    """Fetch benchmark, AUM and fund managers from HDFC's public scheme page."""
+    name=clean(scheme_name)
+    if not name.lower().startswith("hdfc "):
+        return {}
+    base=re.sub(r"\s*[-–]\s*(regular|direct).*", "", name, flags=re.I).strip()
+    slug=re.sub(r"[^a-z0-9]+","-",base.lower()).strip("-")
+    url=f"https://www.hdfcfund.com/explore/mutual-funds/{slug}/regular"
+    try:
+        html=fetch(url).decode("utf-8","replace")
+        text=clean(re.sub(r"<[^>]+>"," ",html))
+        result={}
+        m=re.search(r"AUM\s*\(\s*(\d{2}/\d{2}/\d{4})\s*\)\s*₹?\s*([\d,]+\.?\d*)\s*Cr",text,re.I)
+        if m: result["aum"]=f"₹{m.group(2)} Cr (as of {m.group(1)})"
+        m=re.search(r"(NIFTY[^.]{0,100}?(?:Total Returns Index|TRI))",text,re.I)
+        if m: result["benchmark"]=clean(m.group(1))
+        managers=[]
+        for match in re.finditer(r"Mr\.\s*([A-Z][A-Za-z .'-]{2,50})\s+Fund",text):
+            person=clean(match.group(1))
+            if person not in managers: managers.append(person)
+        if managers: result["managers"]=", ".join(managers[:6])
+        result["source"]=url
+        return result
+    except Exception as e:
+        print("AMC metadata fetch failed:",repr(e))
+        return {}
+
 def main():
     rows=amfi_rows()
     scheme,matches=find_scheme(rows,QUERY)
@@ -110,16 +137,17 @@ def main():
         body="I couldn't find this Regular Plan – Growth scheme in AMFI's latest NAV file. Please check the scheme name."
         telegram_send(body); return
     ret,endd=trailing(scheme["code"])
+    meta=amc_metadata(scheme["name"])
     lines=[f"📊 <b>{scheme['name']}</b>","",
            f"<b>1. NAV</b>  ₹{fmt(scheme['nav'],4)}  |  {scheme['date']}","","<b>2. Trailing returns (annualised CAGR)</b>",
            "<pre>Period    Scheme    Benchmark"]
     for y in (3,5,7,10):
         val=f"{fmt(ret[y])}%" if y in ret else "N/A"
-        lines.append(f"{y:<9}{val:<10}Pending")
-    lines += ["</pre>","<b>3. Benchmark</b> Pending AMC benchmark disclosure",
-              "<b>4. AUM</b> Pending latest AMC disclosure",
-              "<b>5. Fund Manager</b> Pending latest AMC disclosure",
-              "<b>6. Top 10 Holdings</b> Pending latest AMC portfolio disclosure","",
+        lines.append(f"{y:<9}{val:<10}N/A")
+    lines += ["</pre>",f"<b>3. Benchmark</b> {meta.get('benchmark','Not available from AMC page')}",
+              f"<b>4. AUM</b> {meta.get('aum','Not available from AMC page')}",
+              f"<b>5. Fund Manager</b> {meta.get('managers','Not available from AMC page')}",
+              "<b>6. Top 10 Holdings</b> AMC portfolio disclosure integration in progress","",
               f"<i>Scheme NAV: AMFI. Historical NAV through {endd:%d-%b-%Y}.</i>" if endd else "<i>AMFI NAV source.</i>"]
     telegram_send("\n".join(lines))
 
