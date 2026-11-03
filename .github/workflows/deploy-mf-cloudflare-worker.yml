@@ -2,6 +2,10 @@ name: Deploy Mutual Fund Cloudflare Worker
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "mf-bot/cloudflare-worker.js"
+      - ".github/workflows/deploy-mf-cloudflare-worker.yml"
 
 permissions:
   contents: read
