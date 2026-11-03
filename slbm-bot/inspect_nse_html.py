@@ -73,7 +73,7 @@ except Exception as exc:
     print(f"SLB_JS_FETCH_ERROR={exc}")
 
 
-// Probe NSE's official SLBM series master, selected Series B contracts, and CSV export.
+# Probe NSE's official SLBM series master, selected Series B contracts, and CSV export.
 from urllib.request import Request, urlopen
 import json
 import urllib.parse
