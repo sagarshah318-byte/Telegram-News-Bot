@@ -80,7 +80,7 @@ def cagr_returns(data):
             if v>0: parsed.append((d,v))
         except Exception: pass
     parsed.sort()
-    if not parsed: return {}
+    if not parsed: return {}, None
     end_date,end_nav=parsed[-1]
     out={}
     for years in (3,5,7,10):
