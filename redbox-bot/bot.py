@@ -114,10 +114,11 @@ def main():
         print("Initial feed baseline saved. New posts will be forwarded from the next check.")
         return
 
-    lookback_minutes = int(os.environ.get("LOOKBACK_MINUTES", "0") or "0")
-    if lookback_minutes > 0:
-        now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(minutes=lookback_minutes)
+    test_from = os.environ.get("TEST_FROM", "").strip()
+    test_to = os.environ.get("TEST_TO", "").strip()
+    if test_from and test_to:
+        start_at = datetime.fromisoformat(test_from).astimezone(timezone.utc)
+        end_at = datetime.fromisoformat(test_to).astimezone(timezone.utc)
         new_entries = []
         for entry in entries:
             published = entry.get("published", "").strip()
@@ -130,11 +131,11 @@ def main():
                     published_at = parsedate_to_datetime(published)
                 if published_at.tzinfo is None:
                     published_at = published_at.replace(tzinfo=timezone.utc)
-                if cutoff <= published_at.astimezone(timezone.utc) <= now:
+                if start_at <= published_at.astimezone(timezone.utc) <= end_at:
                     new_entries.append(entry)
             except (TypeError, ValueError, OverflowError):
                 print("Skipping entry with unrecognized publication date: " + published)
-        print("One-off lookback mode: last " + str(lookback_minutes) + " minutes; matching entries: " + str(len(new_entries)))
+        print("One-off test window: " + test_from + " to " + test_to + "; matching entries: " + str(len(new_entries)))
     else:
         new_entries = [entry for entry in entries if entry.get("id") and entry["id"] not in seen_set]
 
