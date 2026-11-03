@@ -121,9 +121,6 @@ def main():
         start_at = datetime.fromisoformat(test_from).astimezone(timezone.utc)
         end_at = datetime.fromisoformat(test_to).astimezone(timezone.utc)
         matching = []
-        print("RSS publication-date samples:")
-        for sample in entries[:8]:
-            print("DATE=" + repr(sample.get("published", "")) + " TITLE=" + repr(sample.get("title", "")[:120]))
         for entry in entries:
             published = entry.get("published", "").strip()
             if not published or not entry.get("id"):
