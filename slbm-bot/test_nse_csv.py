@@ -36,7 +36,7 @@ def main():
         table_rows = page.locator("table tr")
         print(f"VISIBLE_TABLE_ROW_COUNT={table_rows.count()}")
         for i in range(min(table_rows.count(), 8)):
-            row_text = re.sub(r"\\s+", " ", table_rows.nth(i).inner_text()).strip()
+            row_text = re.sub(r"\s+", " ", table_rows.nth(i).inner_text()).strip()
             print(f"TABLE_ROW_{i}={row_text}")
 
         # Use NSE's own on-page CSV download control. Do not call hidden/private APIs.
@@ -58,7 +58,7 @@ def main():
         print(f"CSV_SIZE_BYTES={target.stat().st_size}")
         raw = target.read_text(encoding="utf-8-sig", errors="replace")
         print("CSV_PREVIEW_BEGIN")
-        print("\\n".join(raw.splitlines()[:12]))
+        print("\n".join(raw.splitlines()[:12]))
         print("CSV_PREVIEW_END")
 
         # CSV may use a quoted multi-row heading; report parsed header candidates.
