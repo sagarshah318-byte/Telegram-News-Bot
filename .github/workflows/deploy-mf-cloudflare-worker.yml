@@ -36,3 +36,5 @@ jobs:
             --name mutual-fund-telegram \
             --compatibility-date 2026-11-04 \
             --keep-vars
+
+# Retry deployment after refreshing Cloudflare API credentials.
