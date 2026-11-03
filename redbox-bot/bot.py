@@ -122,6 +122,9 @@ def main():
         start_at = datetime.fromisoformat(test_from).astimezone(timezone.utc)
         end_at = datetime.fromisoformat(test_to).astimezone(timezone.utc)
         matching = []
+        print("RSS publication-date samples:")
+        for sample in entries[:8]:
+            print("DATE=" + repr(sample.get("published", "")) + " TITLE=" + repr(sample.get("title", "")[:120]))
         for entry in entries:
             published = entry.get("published", "").strip()
             if not published or not entry.get("id"):
@@ -142,8 +145,6 @@ def main():
         matching.reverse()
         print("Test window " + test_from + " to " + test_to + ": " + str(len(matching)) + " matching feed entries")
         for entry in matching:
-            if entry["id"] in seen_set:
-                continue
             link = entry.get("link", "")
             title = entry.get("title", "").strip()
             body = entry.get("text", "").strip()
