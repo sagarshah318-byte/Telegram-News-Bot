@@ -39,6 +39,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nse-slbm-csv-test
-          path: artifacts/*.csv
+          path: artifacts/*
           if-no-files-found: warn
           retention-days: 7
