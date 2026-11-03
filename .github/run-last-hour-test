@@ -7,3 +7,5 @@ Timestamp diagnostics and final test attempt.
 Retry after fixing JSON cursor serialization.
 
 Retry the requested hour using FxEmbed RSS.
+
+Check FixupX feed freshness for the requested window.
