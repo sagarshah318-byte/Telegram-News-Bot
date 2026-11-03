@@ -34,7 +34,7 @@ jobs:
         run: |
           npx --yes wrangler@4 deploy mf-bot/cloudflare-worker.js \
             --name mutual-fund-telegram \
-            --compatibility-date 2026-11-04 \
+            --compatibility-date 2026-11-03 \
             --keep-vars
 
 # Retry deployment after refreshing Cloudflare API credentials.
