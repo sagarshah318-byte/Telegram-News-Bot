@@ -13,8 +13,10 @@ def fetch(url, timeout=45):
     req=urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0 (compatible; MFResearchBot/1.0)"})
     with urllib.request.urlopen(req, timeout=timeout) as r: return r.read()
 
-def telegram_send(text):
-    payload=urllib.parse.urlencode({"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML","disable_web_page_preview":"true"}).encode()
+def telegram_send(text, reply_markup=None):
+    data={"chat_id":CHAT_ID,"text":text,"parse_mode":"HTML","disable_web_page_preview":"true"}
+    if reply_markup: data["reply_markup"]=json.dumps(reply_markup,ensure_ascii=False)
+    payload=urllib.parse.urlencode(data).encode()
     req=urllib.request.Request(BASE+"sendMessage",data=payload,headers={"Content-Type":"application/x-www-form-urlencoded"})
     with urllib.request.urlopen(req,timeout=30) as r:
         result=json.loads(r.read())
@@ -36,6 +38,9 @@ def amfi_rows():
 
 def find_scheme(rows,q):
     q=clean(q).lower()
+    if q.isdigit():
+        exact=[r for r in rows if r["code"]==q and "regular" in r["name"].lower() and "growth" in r["name"].lower()]
+        return (exact[0],exact) if exact else (None,[])
     eligible=[r for r in rows if "regular" in r["name"].lower() and "growth" in r["name"].lower()]
     words=[w for w in re.findall(r"[a-z0-9]+",q) if len(w)>2]
     def matches_words(name):
@@ -45,7 +50,7 @@ def find_scheme(rows,q):
     if len(matches)==1: return matches[0],matches
     if len(matches)>1:
         matches.sort(key=lambda r: len(r["name"]))
-        return matches[0],matches[:8]
+        return None,matches[:8]
     try:
         found=json.loads(fetch("https://api.mfapi.in/mf/search?q="+urllib.parse.quote(q)))
         candidates=[]
@@ -85,8 +90,10 @@ def main():
     scheme,matches=find_scheme(rows,QUERY)
     if not scheme:
         if matches:
-            body="I found multiple Regular Plan – Growth matches. Please send a more specific name:\\n"+"\\n".join("• "+x["name"] for x in matches)
-        else: body="I couldn't find this Regular Plan – Growth scheme in AMFI's latest NAV file. Please check the scheme name."
+            body="I found multiple Regular Plan – Growth schemes. Please select the correct fund:"
+            keyboard={"inline_keyboard":[[{"text":x["name"][:60],"callback_data":"MFSEL:"+x["code"]}] for x in matches[:8]]}
+            telegram_send(body,keyboard); return
+        body="I couldn't find this Regular Plan – Growth scheme in AMFI's latest NAV file. Please check the scheme name."
         telegram_send(body); return
     ret,endd=trailing(scheme["code"])
     lines=[f"📊 <b>{scheme['name']}</b>","<i>Regular Plan – Growth</i>","",
