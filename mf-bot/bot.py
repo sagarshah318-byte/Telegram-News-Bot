@@ -137,10 +137,11 @@ def main():
     for y in (3,5,7,10):
         val=f"{fmt(ret[y])}%" if y in ret else "N/A"
         lines.append(f"{y:<9}{val:<10}N/A")
-    lines += ["</pre>",f"<b>3. Benchmark</b> {meta.get('benchmark') or 'Not yet verified from latest AMC factsheet'}",
+    lines += ["</pre>",f"<b>AMC</b> {meta.get('fund_house') or 'Not identified'}",f"<b>3. Benchmark</b> {meta.get('benchmark') or 'Not yet verified from latest AMC factsheet'}",
               f"<b>4. AUM</b> {meta.get('aum') or 'Not yet verified from latest scheme disclosure'}",
               f"<b>5. Fund Manager</b> {meta.get('managers') or 'Not yet verified from latest AMC factsheet'}",
               "<b>6. Top 10 Holdings</b> AMC portfolio disclosure integration in progress","",
+              '<a href="https://www.amfiindia.com/online-center/download-factsheets">AMC factsheets</a> | <a href="https://www.amfiindia.com/online-center/portfolio-disclosure">Portfolio disclosures</a>',"",
               f"<i>Scheme NAV: AMFI. Historical NAV through {endd:%d-%b-%Y}.</i>" if endd else "<i>AMFI NAV source.</i>"]
     telegram_send("\n".join(lines))
 
