@@ -3,8 +3,7 @@ name: REDBOXINDIA to Telegram
 on:
   push:
     paths:
-      - ".github/workflows/redbox-telegram.yml"
-      - "redbox-bot/bot.py"
+      - ".github/run-last-hour-test"
   schedule:
     - cron: "30 2-17 * * *"
   workflow_dispatch:
@@ -30,4 +29,5 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          LOOKBACK_MINUTES: ${{ github.event_name == 'push' && '60' || '' }}
         run: python redbox-bot/bot.py
