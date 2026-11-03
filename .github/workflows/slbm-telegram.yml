@@ -1,0 +1,34 @@
+name: NSE SLBM opportunity alerts
+
+on:
+  schedule:
+    # 9:15 AM IST first scan, then every 30 minutes through 5:00 PM IST.
+    - cron: "45 3 * * 1-5"
+    - cron: "0,30 4-11 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nse-slbm-telegram-alerts
+  cancel-in-progress: false
+
+jobs:
+  scan-and-alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Scan NSE Series B and send new opportunities
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python slbm-bot/bot.py
