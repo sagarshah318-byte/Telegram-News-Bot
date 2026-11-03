@@ -34,7 +34,10 @@ export default {
     });
     if (!response.ok) {
       const detail = await response.text();
-      return new Response("GitHub dispatch failed: " + detail, { status: 502 });
+      console.error("MF GitHub dispatch rejected", response.status, detail.slice(0, 800));
+      await telegramSend(env, msg.chat.id, "Sorry, I couldn't start the fund lookup. GitHub returned an error (" + response.status + "). Please try again shortly.");
+      // Acknowledge Telegram's webhook delivery so it does not retry the same failed update.
+      return new Response("Dispatch failed; user notified", { status: 200 });
     }
     return new Response("Accepted", { status: 202 });
   }
