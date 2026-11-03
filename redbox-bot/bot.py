@@ -12,8 +12,8 @@ import xml.etree.ElementTree as ET
 USERNAME = "REDBOXINDIA"
 STATE_PATH = "redbox-bot/state.json"
 FEEDS = [
-    "https://fxtwitter.com/" + USERNAME + "/feed.xml",
     "https://fixupx.com/" + USERNAME + "/feed.xml",
+    "https://fxtwitter.com/" + USERNAME + "/feed.xml",
 ]
 ATOM = "{http://www.w3.org/2005/Atom}"
 
