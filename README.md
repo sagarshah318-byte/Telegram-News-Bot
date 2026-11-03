@@ -1,16 +1,12 @@
 # REDBOXINDIA → Telegram
 
-This bot checks the public X account [@REDBOXINDIA](https://x.com/REDBOXINDIA) hourly from 8:00 AM to 11:00 PM India time and forwards new feed entries to Telegram.
+This bot checks the public X account [@REDBOXINDIA](https://x.com/REDBOXINDIA) hourly from 8:00 AM to 11:00 PM India time and forwards new posts to Telegram.
 
 ## Free feed method
 
-The bot uses public RSSHub instances instead of the paid X API. It tries these public feed providers in order:
+The bot uses the public FxEmbed RSS profile feed, with the FixupX host as a fallback. No paid X API token is required.
 
-1. https://rsshub.app
-2. https://rsshub.stsecurity.moe
-3. https://rsshub.axisnetcloud.com
-
-Public RSS services can be rate-limited, unavailable, or blocked by X. RSS may omit some posts or media, and the feed may expose only a limited recent history. This is a free best-effort method, not a guarantee that every X post will always be captured.
+Free third-party feeds are not guaranteed to be real-time or complete. They may be delayed, rate-limited, or temporarily unavailable. The bot records successfully delivered post IDs in `redbox-bot/state.json` to reduce duplicates.
 
 ## GitHub Actions secrets
 
@@ -23,10 +19,6 @@ No X API token is required.
 
 ## Schedule
 
-The workflow runs hourly from 08:00 through 23:00 India time. Posts published overnight are picked up at the next 08:00 run, provided the RSS feed still contains them.
-
-## First run
-
-The first run saves the currently visible feed entries as a baseline and does not send older posts. New entries on later runs are forwarded oldest-first. Successfully delivered entry IDs are saved in `redbox-bot/state.json` to reduce duplicate messages.
+The workflow runs hourly from 08:00 through 23:00 India time. Posts made overnight are picked up at the next 08:00 run, provided they are still present in the RSS feed.
 
 You can also run it manually from **Actions → REDBOXINDIA to Telegram → Run workflow**.
