@@ -35,14 +35,13 @@ export default {
     if (!response.ok) {
       const detail = await response.text();
       console.error("MF GitHub dispatch rejected", response.status, detail.slice(0, 800));
-      await telegramSend(env, msg.chat.id, "Sorry, I couldn't start the fund lookup. GitHub returned an error (" + response.status + "). Please try again shortly.");
-      // Acknowledge Telegram's webhook delivery so it does not retry the same failed update.
+      const safeDetail = detail.replace(/[\r\n]+/g, " ").slice(0, 350);
+      await telegramSend(env, msg.chat.id, "GitHub dispatch error " + response.status + ": " + safeDetail);
       return new Response("Dispatch failed; user notified", { status: 200 });
     }
     return new Response("Accepted", { status: 202 });
   }
 };
-
 async function telegramSend(env, chatId, text) {
   await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST", headers: { "Content-Type": "application/json" },
