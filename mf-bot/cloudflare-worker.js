@@ -29,7 +29,7 @@ export default {
     const repo = env.GITHUB_REPO || "Telegram-News-Bot";
     const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/dispatches`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${env.GITHUB_TOKEN}`, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${env.GITHUB_TOKEN}`, "User-Agent": "Mutual-Fund-Telegram-Bot", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json" },
       body: JSON.stringify({ event_type: "mf_lookup", client_payload: { scheme: query, chat_id: String(msg.chat.id), request_id: String(update.update_id) } })
     });
     if (!response.ok) {
