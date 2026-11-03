@@ -34,5 +34,5 @@ for term in ("Download (.csv)", "csv", "securities-lending", "market-watch", "ap
     hits = [m.start() for m in re.finditer(re.escape(term), content, re.I)]
     print(f"TERM_{term.upper().replace(' ','_')}_COUNT={len(hits)}")
     for pos in hits[:4]:
-        excerpt = re.sub(r"\\s+", " ", content[max(0,pos-180):pos+360])
+        excerpt = re.sub(r"\s+", " ", content[max(0,pos-180):pos+360])
         print(f"EXCERPT_{term.upper().replace(' ','_')}={excerpt}")
