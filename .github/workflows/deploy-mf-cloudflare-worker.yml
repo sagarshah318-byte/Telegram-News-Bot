@@ -1,0 +1,24 @@
+name: Deploy Mutual Fund Cloudflare Worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Deploy Mutual Fund Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 73d0e2fb31eccddb53e5d61a3fdb51e2
+        run: |
+          npx --yes wrangler@4 deploy mf-bot/cloudflare-worker.js \
+            --name mutual-fund-telegram \
+            --compatibility-date 2026-11-04 \
+            --keep-vars
