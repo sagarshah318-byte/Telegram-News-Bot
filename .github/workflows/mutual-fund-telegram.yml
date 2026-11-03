@@ -1,42 +1,40 @@
 name: Mutual Fund Telegram Bot
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
+  repository_dispatch:
+    types: [mf_lookup]
   workflow_dispatch:
+    inputs:
+      scheme:
+        description: Mutual fund scheme name
+        required: true
+        type: string
+      chat_id:
+        description: Telegram chat ID
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: mutual-fund-telegram-bot
+  group: mutual-fund-lookup-${{ github.event.client_payload.request_id || github.run_id }}
   cancel-in-progress: false
 
 jobs:
-  poll-and-reply:
+  lookup-and-reply:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Poll Telegram and reply
+      - name: Fetch fund data and reply
         env:
           MF_BOT_TOKEN: ${{ secrets.MF_BOT_TOKEN }}
-          MF_CHAT_ID: ${{ secrets.MF_CHAT_ID }}
+          MF_SCHEME: ${{ github.event.client_payload.scheme || inputs.scheme }}
+          MF_CHAT_ID: ${{ github.event.client_payload.chat_id || inputs.chat_id }}
         run: python mf-bot/bot.py
-      - name: Save Telegram update offset
-        run: |
-          if ! git diff --quiet -- mf-bot/state.json; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add mf-bot/state.json
-            git commit -m "Update mutual fund bot polling state"
-            git pull --rebase origin main
-            git push
-          fi
