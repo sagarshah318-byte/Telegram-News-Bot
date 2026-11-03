@@ -135,11 +135,11 @@ def telegram_send(message):
 
 def format_alert(row):
     return (
-        f"{row['symbol']} | {row['month']} | Spread ₹{show(row['spread'])} ({row['spread_per']:.2f}%)\\n"
+        f"{row['symbol']} | {row['month']} | Spread ₹{show(row['spread'])} ({row['spread_per']:.2f}%)\n"
         f"Bid: ₹{show(row['bid_price'])} x {show(row['bid_qty'], 0)} | "
-        f"Offer: ₹{show(row['offer_price'])} x {show(row['offer_qty'], 0)}\\n"
+        f"Offer: ₹{show(row['offer_price'])} x {show(row['offer_qty'], 0)}\n"
         f"SLB LTP: ₹{show(row['ltp'])} | Underlying: ₹{show(row['underlying'])} | "
-        f"Futures: ₹{show(row['futures'])}\\n"
+        f"Futures: ₹{show(row['futures'])}\n"
         f"Data time: {row['timestamp'] or 'Not supplied'}"
     )
 
@@ -147,11 +147,11 @@ def format_alert(row):
 def send_batched_alerts(rows):
     if not rows:
         return
-    prefix = f"📊 NSE SLBM OPPORTUNITIES | Spread >= {THRESHOLD:.1f}%\\n\\n"
+    prefix = f"📊 NSE SLBM OPPORTUNITIES | Spread >= {THRESHOLD:.1f}%\n\n"
     messages = []
     current = prefix
     for row in rows:
-        block = format_alert(row) + "\\n\\n"
+        block = format_alert(row) + "\n\n"
         if len(current) + len(block) > 3500 and current != prefix:
             messages.append(current.rstrip())
             current = prefix
