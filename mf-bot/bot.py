@@ -40,7 +40,21 @@ def find_scheme(rows,q):
     q=clean(q).lower()
     if q.isdigit():
         exact=[r for r in rows if r["code"]==q and "regular" in r["name"].lower() and "growth" in r["name"].lower()]
-        return (exact[0],exact) if exact else (None,[])
+        if exact:
+            return exact[0],exact
+        # AMFI's daily NAV file can omit a code temporarily. Resolve the
+        # selected button directly through MFAPI using the scheme code.
+        try:
+            detail=json.loads(fetch(f"https://api.mfapi.in/mf/{urllib.parse.quote(q)}"))
+            meta=detail.get("meta") or {}
+            name=clean(meta.get("scheme_name",""))
+            history=detail.get("data") or []
+            latest=history[0] if history else {}
+            if name and "regular" in name.lower() and "growth" in name.lower():
+                return {"code":q,"name":name,"nav":latest.get("nav",""),"date":latest.get("date","")},[]
+        except Exception as e:
+            print("Selected scheme code lookup failed:",repr(e))
+        return None,[]
     eligible=[r for r in rows if "regular" in r["name"].lower() and "growth" in r["name"].lower()]
     words=[w for w in re.findall(r"[a-z0-9]+",q) if len(w)>2]
     def matches_words(name):
