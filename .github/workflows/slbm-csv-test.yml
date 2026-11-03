@@ -22,6 +22,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install playwright
           python -m playwright install --with-deps chromium
+      - name: Diagnose NSE page access over HTTP/1.1
+        run: |
+          set +e
+          curl -sS -L --http1.1 --max-time 60 \
+            -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36" \
+            -o /tmp/nse_slbm_landing.html \
+            -w "CURL_HTTP_STATUS=%{http_code} HTTP_VERSION=%{http_version} BYTES=%{size_download}\\n" \
+            "https://www.nseindia.com/market-data/securities-lending-and-borrowing"
+          echo "CURL_EXIT_CODE=$?"
+          if [ -f /tmp/nse_slbm_landing.html ]; then head -c 500 /tmp/nse_slbm_landing.html; fi
       - name: Open NSE and download the visible SLBM CSV
         run: python slbm-bot/test_nse_csv.py
       - name: Save downloaded CSV for inspection
