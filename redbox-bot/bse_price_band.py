@@ -81,12 +81,12 @@ def fetch_notices(start_date, end_date):
                 notice_date = date_text
 
         raw_text = " ".join((item.itertext()))
-        notice_match = re.search(r"20\\d{6}-\\d+", raw_text + " " + link)
+        notice_match = re.search(r"20\d{6}-\d+", raw_text + " " + link)
         notice_no = notice_match.group(0) if notice_match else ""
         if not notice_no:
             continue
 
-        pdf_match = re.search(r'https?://[^\\s<>"\\']+\\.pdf(?:\\?[^\\s<>"\\']*)?', html.unescape(raw_text), re.I)
+        pdf_match = re.search(r'https?://[^\s<>"\']+\.pdf(?:\?[^\s<>"\']*)?', html.unescape(raw_text), re.I)
         pdf_url = pdf_match.group(0).replace("&amp;", "&") if pdf_match else ""
         notices.append({
             "Subject": title,
@@ -122,8 +122,8 @@ def find_pdf_url(row):
     page, final_url, _ = fetch_url(notice_link, referer="https://www.bseindia.com/markets/MarketInfo/DispNewNoticesCirculars.aspx")
     page_text = html.unescape(page.decode("utf-8", errors="replace"))
     patterns = [
-        r'https?://[^\\s"\'<>]+\\.pdf(?:\\?[^\\s"\'<>]*)?',
-        r'(?:href|src)\\s*=\\s*["\']([^"\']+\\.pdf(?:\\?[^"\']*)?)["\']',
+        r'https?://[^\s"\'<>]+\.pdf(?:\?[^\s"\'<>]*)?',
+        r'(?:href|src)\s*=\s*["\']([^"\']+\.pdf(?:\?[^"\']*)?)["\']',
     ]
     for pattern in patterns:
         match = re.search(pattern, page_text, re.I)
@@ -151,17 +151,17 @@ def send_document(payload, filename, caption):
     }
     body = bytearray()
     for key, value in fields.items():
-        body.extend(f"--{boundary}\\r\\n".encode())
-        body.extend(f'Content-Disposition: form-data; name="{key}"\\r\\n\\r\\n'.encode())
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode())
         body.extend(value.encode("utf-8"))
-        body.extend(b"\\r\\n")
-    body.extend(f"--{boundary}\\r\\n".encode())
+        body.extend(b"\r\n")
+    body.extend(f"--{boundary}\r\n".encode())
     body.extend(
-        f'Content-Disposition: form-data; name="document"; filename="{filename}"\\r\\n'.encode()
+        f'Content-Disposition: form-data; name="document"; filename="{filename}"\r\n'.encode()
     )
-    body.extend(b"Content-Type: application/pdf\\r\\n\\r\\n")
+    body.extend(b"Content-Type: application/pdf\r\n\r\n")
     body.extend(payload)
-    body.extend(f"\\r\\n--{boundary}--\\r\\n".encode())
+    body.extend(f"\r\n--{boundary}--\r\n".encode())
 
     url = "https://api.telegram.org/bot" + os.environ["TELEGRAM_BOT_TOKEN"] + "/sendDocument"
     request = urllib.request.Request(
@@ -182,7 +182,7 @@ def send_document(payload, filename, caption):
 
 
 def save_state(state):
-    STATE_PATH.write_text(json.dumps(state, indent=2) + "\\n", encoding="utf-8")
+    STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
     subprocess.run([
         "git", "config", "user.email",
@@ -224,9 +224,9 @@ def main():
             raise RuntimeError(f"No official PDF link found for BSE notice {notice_no}")
         payload = download_pdf(pdf_url, notice_no)
         notice_date = field(row, "NoticeDate", "Notice Date", "Date")
-        caption = f"BSE | {SUBJECT}\\nNotice No: {notice_no}"
+        caption = f"BSE | {SUBJECT}\nNotice No: {notice_no}"
         if notice_date:
-            caption += f"\\nNotice Date: {notice_date}"
+            caption += f"\nNotice Date: {notice_date}"
         send_document(payload, f"BSE_{notice_no}.pdf", caption)
         newly_sent.append(notice_no)
         sent.add(notice_no)
