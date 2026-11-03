@@ -10,14 +10,21 @@ OUT.mkdir(exist_ok=True)
 
 def main():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--disable-http2"])
         context = browser.new_context(
             accept_downloads=True,
             user_agent=("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                         "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
         )
         page = context.new_page()
-        response = page.goto(URL, wait_until="domcontentloaded", timeout=90000)
+        try:
+            response = page.goto(URL, wait_until="domcontentloaded", timeout=90000)
+        except Exception as first_error:
+            print(f"FIRST_NAVIGATION_ERROR={first_error}")
+            # Retry after the initial TLS/session setup with a fresh page.
+            page = context.new_page()
+            response = page.goto(URL, wait_until="commit", timeout=90000)
+            page.wait_for_load_state("domcontentloaded", timeout=60000)
         print(f"PAGE_HTTP_STATUS={response.status if response else 'unknown'}")
         page.wait_for_timeout(12000)
 
