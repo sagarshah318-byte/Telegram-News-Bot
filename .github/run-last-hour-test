@@ -5,3 +5,5 @@ Retry after fixing first-run test-window handling.
 Timestamp diagnostics and final test attempt.
 
 Retry after fixing JSON cursor serialization.
+
+Retry the requested hour using FxEmbed RSS.
