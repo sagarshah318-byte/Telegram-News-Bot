@@ -2,6 +2,8 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -112,10 +114,33 @@ def main():
         print("Initial feed baseline saved. New posts will be forwarded from the next check.")
         return
 
-    new_entries = [entry for entry in entries if entry.get("id") and entry["id"] not in seen_set]
+    lookback_minutes = int(os.environ.get("LOOKBACK_MINUTES", "0") or "0")
+    if lookback_minutes > 0:
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(minutes=lookback_minutes)
+        new_entries = []
+        for entry in entries:
+            published = entry.get("published", "").strip()
+            if not published or not entry.get("id"):
+                continue
+            try:
+                try:
+                    published_at = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                except ValueError:
+                    published_at = parsedate_to_datetime(published)
+                if published_at.tzinfo is None:
+                    published_at = published_at.replace(tzinfo=timezone.utc)
+                if cutoff <= published_at.astimezone(timezone.utc) <= now:
+                    new_entries.append(entry)
+            except (TypeError, ValueError, OverflowError):
+                print("Skipping entry with unrecognized publication date: " + published)
+        print("One-off lookback mode: last " + str(lookback_minutes) + " minutes; matching entries: " + str(len(new_entries)))
+    else:
+        new_entries = [entry for entry in entries if entry.get("id") and entry["id"] not in seen_set]
+
     # Feed order is normally newest-first, so deliver oldest-first.
     new_entries.reverse()
-    print("New RSS entries: " + str(len(new_entries)))
+    print("Entries to forward: " + str(len(new_entries)))
 
     for entry in new_entries:
         link = entry.get("link", "")
