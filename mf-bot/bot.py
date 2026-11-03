@@ -96,7 +96,7 @@ def main():
         body="I couldn't find this Regular Plan – Growth scheme in AMFI's latest NAV file. Please check the scheme name."
         telegram_send(body); return
     ret,endd=trailing(scheme["code"])
-    lines=[f"📊 <b>{scheme['name']}</b>","<i>Regular Plan – Growth</i>","",
+    lines=[f"📊 <b>{scheme['name']}</b>","",
            f"<b>1. NAV</b>  ₹{fmt(scheme['nav'],4)}  |  {scheme['date']}","","<b>2. Trailing returns (annualised CAGR)</b>",
            "<pre>Period    Scheme    Benchmark"]
     for y in (3,5,7,10):
@@ -107,6 +107,6 @@ def main():
               "<b>5. Fund Manager</b> Pending latest AMC disclosure",
               "<b>6. Top 10 Holdings</b> Pending latest AMC portfolio disclosure","",
               f"<i>Scheme NAV: AMFI. Historical NAV through {endd:%d-%b-%Y}.</i>" if endd else "<i>AMFI NAV source.</i>"]
-    telegram_send("\\n".join(lines))
+    telegram_send("\n".join(lines))
 
 if __name__=="__main__": main()
