@@ -1,9 +1,12 @@
+import html
 import json
 import os
+import re
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,11 +19,63 @@ FEEDS = [
     "https://fxtwitter.com/" + USERNAME + "/feed.xml",
 ]
 ATOM = "{http://www.w3.org/2005/Atom}"
+STATUS_RE = re.compile(r"/status/(\d+)", re.IGNORECASE)
+
+
+class PlainTextParser(HTMLParser):
+    BLOCK_TAGS = {"p", "div", "br", "li", "tr", "blockquote"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() in self.BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag.lower() in self.BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def clean_post_text(value):
+    value = html.unescape(value or "")
+    parser = PlainTextParser()
+    try:
+        parser.feed(value)
+        parser.close()
+        value = "".join(parser.parts)
+    except Exception:
+        pass
+
+    lines = []
+    for line in value.replace("\r", "\n").split("\n"):
+        line = re.sub(r"[\t\u00a0 ]+", " ", line).strip()
+        if line:
+            lines.append(line)
+
+    # Collapse repeated blank lines while retaining paragraph breaks.
+    return "\n\n".join(lines).strip()
+
+
+def canonical_post_id(link, guid):
+    for candidate in (link or "", guid or ""):
+        match = STATUS_RE.search(candidate)
+        if match:
+            return "status:" + match.group(1)
+    return (guid or link or "").strip()
+
 
 def get_feed(url):
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "Mozilla/5.0 (compatible; RedboxTelegramBot/1.0)", "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml"},
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; RedboxTelegramBot/1.0)",
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=35) as response:
@@ -40,26 +95,44 @@ def get_feed(url):
             link_node = entry.find(ATOM + "link")
             link = link_node.attrib.get("href", "") if link_node is not None else ""
             guid = entry.findtext(ATOM + "id", default=link)
-            published = entry.findtext(ATOM + "published", default="") or entry.findtext(ATOM + "updated", default="")
+            published = (
+                entry.findtext(ATOM + "published", default="")
+                or entry.findtext(ATOM + "updated", default="")
+            )
             content = entry.find(ATOM + "content")
             summary = entry.find(ATOM + "summary")
-            text = "".join(content.itertext()) if content is not None else (summary.text or "" if summary is not None else title)
-            entries.append({"id": guid or link, "link": link or guid, "title": title, "text": text, "published": published})
+            raw_text = (
+                "".join(content.itertext()) if content is not None
+                else (summary.text or "" if summary is not None else title)
+            )
+            entries.append({
+                "id": canonical_post_id(link, guid),
+                "link": link or guid,
+                "text": clean_post_text(raw_text),
+                "published": published,
+            })
     else:
         channel = root.find("channel")
         if channel is None:
             raise RuntimeError("RSS XML has no channel")
         for item in channel.findall("item"):
-            title = item.findtext("title", default="")
             link = item.findtext("link", default="")
             guid = item.findtext("guid", default=link)
             description = item.findtext("description", default="")
-            pub_date = item.findtext("pubDate", default="")
-            entries.append({"id": guid or link, "link": link or guid, "title": title, "text": description or title, "published": pub_date})
+            title = item.findtext("title", default="")
+            published = item.findtext("pubDate", default="")
+            raw_text = description or title
+            entries.append({
+                "id": canonical_post_id(link, guid),
+                "link": link or guid,
+                "text": clean_post_text(raw_text),
+                "published": published,
+            })
 
     if not entries:
         raise RuntimeError("Feed returned no entries")
     return entries
+
 
 def fetch_entries():
     errors = []
@@ -73,31 +146,44 @@ def fetch_entries():
             print("Feed unavailable: " + feed_url + " -> " + str(exc))
     raise RuntimeError("All free RSS sources failed. " + " | ".join(errors))
 
+
 def send_telegram(message):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     url = "https://api.telegram.org/bot" + token + "/sendMessage"
     data = urllib.parse.urlencode({
         "chat_id": os.environ["TELEGRAM_CHAT_ID"],
         "text": message[:4000],
-        "disable_web_page_preview": "false",
+        "disable_web_page_preview": "true",
     }).encode()
-    request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    request = urllib.request.Request(
+        url, data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
     try:
         with urllib.request.urlopen(request, timeout=35) as response:
             result = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        raise RuntimeError("Telegram HTTP " + str(exc.code) + ": " + exc.read().decode("utf-8", errors="replace")) from exc
+        raise RuntimeError(
+            "Telegram HTTP " + str(exc.code) + ": "
+            + exc.read().decode("utf-8", errors="replace")
+        ) from exc
     if not result.get("ok"):
         raise RuntimeError("Telegram rejected the message: " + str(result))
 
+
 def save_state(seen_ids):
+    # Keep one canonical ID per X status, preventing cross-feed duplicates.
+    unique_ids = list(dict.fromkeys(seen_ids))[-500:]
     with open(STATE_PATH, "w", encoding="utf-8") as file:
-        json.dump({"seen_ids": seen_ids[-500:]}, file, indent=2)
+        json.dump({"seen_ids": unique_ids}, file, indent=2)
         file.write("\n")
-    # Persist the cursor in the repository so the next scheduled runner sees it.
+
     import subprocess
     subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
-    subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
+    subprocess.run([
+        "git", "config", "user.email",
+        "41898282+github-actions[bot]@users.noreply.github.com",
+    ], check=True)
     subprocess.run(["git", "add", STATE_PATH], check=True)
     changed = subprocess.run(["git", "diff", "--cached", "--quiet"])
     if changed.returncode == 1:
@@ -106,13 +192,39 @@ def save_state(seen_ids):
     elif changed.returncode != 0:
         raise RuntimeError("Unable to inspect staged state changes")
 
+
+def parse_published(value):
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        parsed = parsedate_to_datetime(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def main():
     with open(STATE_PATH, encoding="utf-8") as file:
         state = json.load(file)
-    # Migrate from the earlier unused last_id field if present.
-    seen = list(state.get("seen_ids", []))
+
+    # Convert older URL-based IDs to stable X status IDs.
+    seen = []
+    for old_id in state.get("seen_ids", []):
+        seen.append(canonical_post_id(old_id, old_id))
+    seen = list(dict.fromkeys(seen))
     seen_set = set(seen)
+
     entries = fetch_entries()
+
+    # Deduplicate the feed itself before any filtering or sending.
+    unique_entries = []
+    entry_ids = set()
+    for entry in entries:
+        entry_id = entry.get("id")
+        if entry_id and entry_id not in entry_ids:
+            entry_ids.add(entry_id)
+            unique_entries.append(entry)
+    entries = unique_entries
 
     test_from = os.environ.get("TEST_FROM", "").strip()
     test_to = os.environ.get("TEST_TO", "").strip()
@@ -126,38 +238,28 @@ def main():
             if not published or not entry.get("id"):
                 continue
             try:
-                try:
-                    published_at = datetime.fromisoformat(published.replace("Z", "+00:00"))
-                except ValueError:
-                    published_at = parsedate_to_datetime(published)
-                if published_at.tzinfo is None:
-                    published_at = published_at.replace(tzinfo=timezone.utc)
-                published_at = published_at.astimezone(timezone.utc)
+                published_at = parse_published(published)
                 if start_at <= published_at <= end_at:
                     matching.append(entry)
             except (TypeError, ValueError, OverflowError):
                 print("Skipping entry with unrecognized publication date: " + published)
 
         matching.reverse()
-        print("Test window " + test_from + " to " + test_to + ": " + str(len(matching)) + " matching feed entries")
+        print(
+            "Test window " + test_from + " to " + test_to + ": "
+            + str(len(matching)) + " matching feed entries"
+        )
         for entry in matching:
-            link = entry.get("link", "")
-            title = entry.get("title", "").strip()
-            body = entry.get("text", "").strip()
-            message = "New post from @" + USERNAME + "\\n\\n"
-            if title and title != body:
-                message += title + "\\n\\n"
-            message += body
-            if link:
-                message += "\\n\\n" + link
+            message = entry.get("text", "").strip()
+            if not message:
+                print("Skipping empty post: " + entry.get("link", ""))
+                continue
             send_telegram(message)
             seen.append(entry["id"])
             seen_set.add(entry["id"])
-            print("Forwarded test-window entry: " + (link or entry["id"]))
+            print("Forwarded test-window entry: " + (entry.get("link") or entry["id"]))
             time.sleep(0.5)
 
-        # Establish a clean baseline after the one-off test so older feed items
-        # outside the requested hour are not sent by the next scheduled poll.
         for entry in entries:
             entry_id = entry.get("id")
             if entry_id and entry_id not in seen_set:
@@ -168,8 +270,6 @@ def main():
             print("No feed entries carried publication timestamps inside the requested hour.")
         return
 
-    # On the first normal run, record the current feed as the baseline without
-    # sending an artificial connection message or replaying old posts.
     if not seen:
         for entry in entries:
             entry_id = entry.get("id")
@@ -180,26 +280,29 @@ def main():
         print("Initial RSS history saved. Waiting for new posts.")
         return
 
-    new_entries = [entry for entry in entries if entry.get("id") and entry["id"] not in seen_set]
+    new_entries = [
+        entry for entry in entries
+        if entry.get("id") and entry["id"] not in seen_set
+    ]
     new_entries.reverse()
     print("New RSS entries: " + str(len(new_entries)))
 
     for entry in new_entries:
-        link = entry.get("link", "")
-        title = entry.get("title", "").strip()
-        body = entry.get("text", "").strip()
-        message = "New post from @" + USERNAME + "\\n\\n"
-        if title and title != body:
-            message += title + "\\n\\n"
-        message += body
-        if link:
-            message += "\\n\\n" + link
+        message = entry.get("text", "").strip()
+        if not message:
+            print("Skipping empty post: " + entry.get("link", ""))
+            seen.append(entry["id"])
+            seen_set.add(entry["id"])
+            save_state(seen)
+            continue
+
         send_telegram(message)
         seen.append(entry["id"])
         seen_set.add(entry["id"])
         save_state(seen)
-        print("Forwarded: " + (link or entry["id"]))
+        print("Forwarded: " + (entry.get("link") or entry["id"]))
         time.sleep(0.5)
+
 
 if __name__ == "__main__":
     try:
