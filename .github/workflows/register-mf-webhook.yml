@@ -1,6 +1,9 @@
 name: Register Mutual Fund Telegram webhook
 
 on:
+  push:
+    paths:
+      - ".github/workflows/register-mf-webhook.yml"
   workflow_dispatch:
 
 permissions:
