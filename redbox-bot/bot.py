@@ -94,7 +94,7 @@ def send_telegram(message):
 def save_state(seen_ids):
     with open(STATE_PATH, "w", encoding="utf-8") as file:
         json.dump({"seen_ids": seen_ids[-500:]}, file, indent=2)
-        file.write("\\n")
+        file.write("\n")
     # Persist the cursor in the repository so the next scheduled runner sees it.
     import subprocess
     subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
