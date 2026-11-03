@@ -38,7 +38,8 @@ def amfi_rows():
 
 def find_scheme(rows,q):
     q=clean(q).lower()
-    # PPFAS is the fund house name; AMFI files list this scheme under\n    # its official scheme name, Parag Parikh Flexi Cap Fund.\n    if "ppfas" in q and "flexi" in q and "cap" in q:
+    # PPFAS is the fund-house alias for Parag Parikh Flexi Cap Fund.
+    if "ppfas" in q and "flexi" in q and "cap" in q:
         q="122640"
     else:
         q=re.sub(r"\\bppfas\\b", "parag parikh", q, flags=re.I)
