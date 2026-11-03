@@ -71,3 +71,57 @@ try:
             print(re.sub(r"\\s+", " ", js[max(0,pos-220):pos+500]))
 except Exception as exc:
     print(f"SLB_JS_FETCH_ERROR={exc}")
+
+
+// Probe NSE's official SLBM series master, selected Series B contracts, and CSV export.
+from urllib.request import Request, urlopen
+import json
+
+BASE = "https://www.nseindia.com"
+COMMON_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+    "Referer": BASE + "/market-data/securities-lending-and-borrowing",
+    "Accept": "application/json, text/plain, */*",
+}
+
+def nse_get(path):
+    req = Request(BASE + path, headers=COMMON_HEADERS)
+    with urlopen(req, timeout=45) as response:
+        body = response.read()
+        return response.status, response.headers.get("Content-Type", ""), body
+
+try:
+    status, ctype, body = nse_get("/api/live-analysis-slb-series-master")
+    master = json.loads(body.decode("utf-8", errors="replace"))
+    print(f"SLB_MASTER_HTTP={status} CONTENT_TYPE={ctype} BYTES={len(body)}")
+    print("SLB_MASTER_TOP_KEYS=" + ",".join(master.keys()))
+    data = master.get("data", {})
+    print("SLB_MASTER_GROUPS=" + ",".join(data.keys()))
+    series_b = data.get("Series B", [])
+    print(f"SLB_SERIES_B_COUNT={len(series_b)}")
+    for item in series_b:
+        print("SLB_SERIES_B_ITEM=" + json.dumps(item, ensure_ascii=False))
+    # Probe the first two available Series B contracts, which should represent
+    # the nearest available months. Keep the actual keys returned by NSE.
+    for item in series_b[:2]:
+        key = str(item.get("key", ""))
+        label = str(item.get("value", ""))
+        if not key:
+            continue
+        path = "/api/live-analysis-slb?series=" + urllib.parse.quote(key, safe="") 
+        status, ctype, body = nse_get(path)
+        print(f"SLB_DATA_HTTP={status} SERIES_KEY={key} LABEL={label} CONTENT_TYPE={ctype} BYTES={len(body)}")
+        try:
+            payload = json.loads(body.decode("utf-8", errors="replace"))
+            rows = payload.get("data", [])
+            print(f"SLB_DATA_ROWS={len(rows)} TIMESTAMP={payload.get('timestamp')}")
+            if rows:
+                print("SLB_DATA_FIRST_ROW=" + json.dumps(rows[0], ensure_ascii=False))
+        except Exception:
+            print("SLB_DATA_BODY_START=" + body[:500].decode("utf-8", errors="replace"))
+        csv_path = path + "&csv=true"
+        csv_status, csv_type, csv_body = nse_get(csv_path)
+        print(f"SLB_CSV_HTTP={csv_status} SERIES_KEY={key} CONTENT_TYPE={csv_type} BYTES={len(csv_body)}")
+        print("SLB_CSV_HEADER=" + csv_body[:350].decode("utf-8", errors="replace").replace("\\n", " | "))
+except Exception as exc:
+    print(f"SLB_API_PROBE_ERROR={type(exc).__name__}: {exc}")
