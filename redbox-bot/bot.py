@@ -94,32 +94,34 @@ def send_telegram(message):
 def save_state(seen_ids):
     with open(STATE_PATH, "w", encoding="utf-8") as file:
         json.dump({"seen_ids": seen_ids[-500:]}, file, indent=2)
-        file.write("\n")
+        file.write("\\n")
+    # Persist the cursor in the repository so the next scheduled runner sees it.
+    import subprocess
+    subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
+    subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
+    subprocess.run(["git", "add", STATE_PATH], check=True)
+    changed = subprocess.run(["git", "diff", "--cached", "--quiet"])
+    if changed.returncode == 1:
+        subprocess.run(["git", "commit", "-m", "Update delivered RSS post history"], check=True)
+        subprocess.run(["git", "push"], check=True)
+    elif changed.returncode != 0:
+        raise RuntimeError("Unable to inspect staged state changes")
 
 def main():
     with open(STATE_PATH, encoding="utf-8") as file:
         state = json.load(file)
-    seen = state.get("seen_ids", [])
+    # Migrate from the earlier unused last_id field if present.
+    seen = list(state.get("seen_ids", []))
     seen_set = set(seen)
     entries = fetch_entries()
 
-    # RSS feeds usually list newest first. First run establishes a baseline
-    # and deliberately does not forward old posts.
-    if not seen:
-        for entry in entries:
-            if entry.get("id"):
-                seen.append(entry["id"])
-        send_telegram("Redbox News Bot is connected. Monitoring @" + USERNAME + " for new posts.")
-        save_state(seen)
-        print("Initial feed baseline saved. New posts will be forwarded from the next check.")
-        return
-
     test_from = os.environ.get("TEST_FROM", "").strip()
     test_to = os.environ.get("TEST_TO", "").strip()
+
     if test_from and test_to:
         start_at = datetime.fromisoformat(test_from).astimezone(timezone.utc)
         end_at = datetime.fromisoformat(test_to).astimezone(timezone.utc)
-        new_entries = []
+        matching = []
         for entry in entries:
             published = entry.get("published", "").strip()
             if not published or not entry.get("id"):
@@ -131,28 +133,70 @@ def main():
                     published_at = parsedate_to_datetime(published)
                 if published_at.tzinfo is None:
                     published_at = published_at.replace(tzinfo=timezone.utc)
-                if start_at <= published_at.astimezone(timezone.utc) <= end_at:
-                    new_entries.append(entry)
+                published_at = published_at.astimezone(timezone.utc)
+                if start_at <= published_at <= end_at:
+                    matching.append(entry)
             except (TypeError, ValueError, OverflowError):
                 print("Skipping entry with unrecognized publication date: " + published)
-        print("One-off test window: " + test_from + " to " + test_to + "; matching entries: " + str(len(new_entries)))
-    else:
-        new_entries = [entry for entry in entries if entry.get("id") and entry["id"] not in seen_set]
 
-    # Feed order is normally newest-first, so deliver oldest-first.
+        matching.reverse()
+        print("Test window " + test_from + " to " + test_to + ": " + str(len(matching)) + " matching feed entries")
+        for entry in matching:
+            if entry["id"] in seen_set:
+                continue
+            link = entry.get("link", "")
+            title = entry.get("title", "").strip()
+            body = entry.get("text", "").strip()
+            message = "New post from @" + USERNAME + "\\n\\n"
+            if title and title != body:
+                message += title + "\\n\\n"
+            message += body
+            if link:
+                message += "\\n\\n" + link
+            send_telegram(message)
+            seen.append(entry["id"])
+            seen_set.add(entry["id"])
+            print("Forwarded test-window entry: " + (link or entry["id"]))
+            time.sleep(0.5)
+
+        # Establish a clean baseline after the one-off test so older feed items
+        # outside the requested hour are not sent by the next scheduled poll.
+        for entry in entries:
+            entry_id = entry.get("id")
+            if entry_id and entry_id not in seen_set:
+                seen.append(entry_id)
+                seen_set.add(entry_id)
+        save_state(seen)
+        if not matching:
+            print("No feed entries carried publication timestamps inside the requested hour.")
+        return
+
+    # On the first normal run, record the current feed as the baseline without
+    # sending an artificial connection message or replaying old posts.
+    if not seen:
+        for entry in entries:
+            entry_id = entry.get("id")
+            if entry_id:
+                seen.append(entry_id)
+                seen_set.add(entry_id)
+        save_state(seen)
+        print("Initial RSS history saved. Waiting for new posts.")
+        return
+
+    new_entries = [entry for entry in entries if entry.get("id") and entry["id"] not in seen_set]
     new_entries.reverse()
-    print("Entries to forward: " + str(len(new_entries)))
+    print("New RSS entries: " + str(len(new_entries)))
 
     for entry in new_entries:
         link = entry.get("link", "")
         title = entry.get("title", "").strip()
         body = entry.get("text", "").strip()
-        message = "New post from @" + USERNAME + "\n\n"
+        message = "New post from @" + USERNAME + "\\n\\n"
         if title and title != body:
-            message += title + "\n\n"
+            message += title + "\\n\\n"
         message += body
         if link:
-            message += "\n\n" + link
+            message += "\\n\\n" + link
         send_telegram(message)
         seen.append(entry["id"])
         seen_set.add(entry["id"])
