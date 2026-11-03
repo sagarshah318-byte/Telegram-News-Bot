@@ -23,7 +23,7 @@ jobs:
           payload = {
               "url": url,
               "secret_token": secret,
-              "allowed_updates": json.dumps(["message", "edited_message"])
+              "allowed_updates": json.dumps(["message", "edited_message", "callback_query"])
           }
           req = urllib.request.Request(
               f"https://api.telegram.org/bot{token}/setWebhook",
