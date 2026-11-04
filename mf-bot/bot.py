@@ -150,6 +150,41 @@ def _dsp_small_cap_metadata(result):
     result["source"]=url
     return result
 
+def _tigzig_metadata(code, result):
+    """Fetch scheme details including AUM, benchmark and managers where available."""
+    url="https://api.tigzig.com/mf/v1/schemes/"+urllib.parse.quote(code)+"/details?view=full"
+    try:
+        payload=json.loads(fetch(url))
+        root=payload.get("data") or {}
+        def walk(obj):
+            if isinstance(obj,dict):
+                for k,v in obj.items():
+                    yield str(k).lower(),v
+                    yield from walk(v)
+            elif isinstance(obj,list):
+                for v in obj:
+                    yield from walk(v)
+        fields=list(walk(root))
+        def pick(keys):
+            for key,value in fields:
+                if any(x in key for x in keys) and value not in (None,"",[],{}):
+                    if isinstance(value,(str,int,float)):
+                        return clean(str(value))
+            return ""
+        aum=pick(("fund_aum_cr","aum_cr","aum_in_cr","fund_aum"))
+        benchmark=pick(("benchmark_name","primary_benchmark","benchmark"))
+        manager=pick(("fund_manager","manager_name","managers"))
+        if aum and not result.get("aum"):
+            result["aum"]="₹"+aum+" Cr (TIGZIG scheme details)"
+        if benchmark and not result.get("benchmark"):
+            result["benchmark"]=benchmark
+        if manager and not result.get("managers"):
+            result["managers"]=manager
+        result["details_source"]="https://api.tigzig.com/mf/v1/schemes/"+urllib.parse.quote(code)+"/details"
+    except Exception as e:
+        print("TIGZIG scheme details lookup failed:",repr(e))
+    return result
+
 def amc_metadata(scheme_name, code):
     """Use only metadata actually supplied by MFAPI. Do not invent missing factsheet data."""
     scheme=scheme_metadata(code)
@@ -164,6 +199,7 @@ def amc_metadata(scheme_name, code):
         "isin_growth":scheme.get("isin_growth",""),
         "source":"https://www.mfapi.in/"
     }
+    result=_tigzig_metadata(code,result)
     if "dsp" in result["fund_house"].lower() and "small cap" in scheme_name.lower():
         try:
             result=_dsp_small_cap_metadata(result)
