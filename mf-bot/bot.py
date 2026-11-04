@@ -328,8 +328,7 @@ def main():
               "<b>6. Top 10 Holdings</b>",
               *([f"{i}. {holding}" for i,holding in enumerate(meta.get("holdings",[])[:10],1)] if meta.get("holdings") else ["Not available"]),
               "",
-              '<a href="https://www.mfapi.in/">MFAPI data source</a>',"",
-              f"<i>Scheme NAV and history: MFAPI. Historical NAV through {endd:%d-%b-%Y}.</i>" if endd else "<i>MFAPI NAV source.</i>"]
+              f"<i>Historical NAV through {endd:%d/%m/%Y}</i>" if endd else "<i>Historical NAV date unavailable</i>"]
     telegram_send("\n".join(lines))
 
 if __name__=="__main__": main()
