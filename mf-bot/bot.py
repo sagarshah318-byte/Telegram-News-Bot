@@ -257,7 +257,7 @@ def _icici_energy_metadata(result):
         source=section.group(1) if section else page
         holdings=[]
         for ticker,name in names.items():
-            m=re.search(r"\b"+re.escape(ticker)+r"\\b.{0,250}?(\\d{1,2}\.\d{1,2})\s*%",source,re.I|re.S)
+            m=re.search(r"\b"+re.escape(ticker)+r"\b.{0,250}?(\d{1,2}\.\d{1,2})\s*%",source,re.I|re.S)
             if m: holdings.append((name,float(m.group(1))))
         if len(holdings)>=8:
             holdings.sort(key=lambda x:x[1],reverse=True)
