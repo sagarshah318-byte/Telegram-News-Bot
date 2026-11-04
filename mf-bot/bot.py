@@ -140,7 +140,9 @@ def _dsp_small_cap_metadata(result):
     if aum: result["aum"]="₹"+aum+" Cr (as of Sep 30, 2026)"
     if manager: result["managers"]=manager
     holdings=[]
-    start=text.lower().find("portfolio as of")\n    if start>=0:\n        start=text.lower().find("holdings",start)
+    start=text.lower().find("portfolio as of")
+    if start>=0:
+        start=text.lower().find("holdings",start)
     end=text.lower().find("view all holdings",start+1) if start>=0 else -1
     block=text[start:end] if start>=0 and end>start else ""
     for name,weight in re.findall(r"([A-Z][A-Za-z0-9 &.,'()-]{2,90}?)\s*\|\s*(\d+(?:\.\d+)?)\s*%",block):
