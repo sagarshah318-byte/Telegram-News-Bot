@@ -69,10 +69,15 @@ def find_scheme(rows,q):
         except Exception as e:
             print("Selected scheme code lookup failed:",repr(e))
         return None,[]
-    eligible=[r for r in rows if "regular" in r["name"].lower() and "growth" in r["name"].lower()]
+    def is_regular_growth(name):
+        low=name.lower()
+        return "growth" in low and "direct" not in low
+    eligible=[r for r in rows if is_regular_growth(r["name"])]
     words=[w for w in re.findall(r"[a-z0-9]+",q) if len(w)>2]
+    words=["opportunities" if w=="opportunity" else w for w in words]
     def matches_words(name):
         tokens=re.sub(r"[^a-z0-9]+"," ",name.lower()).split()
+        tokens=["opportunities" if w=="opportunity" else w for w in tokens]
         return bool(words) and all(w in tokens for w in words)
     matches=[r for r in eligible if matches_words(r["name"])]
     if len(matches)==1: return matches[0],matches
@@ -84,7 +89,7 @@ def find_scheme(rows,q):
         candidates=[]
         for item in found if isinstance(found,list) else []:
             name=clean(item.get("schemeName",""))
-            if "regular" in name.lower() and "growth" in name.lower() and matches_words(name):
+            if is_regular_growth(name) and matches_words(name):
                 candidates.append({"code":str(item.get("schemeCode","")),"name":name,"nav":"","date":""})
         if len(candidates)==1: return candidates[0],candidates
         return None,candidates[:8]
