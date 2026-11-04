@@ -115,9 +115,47 @@ def scheme_metadata(code):
         return {}
 
 def amc_metadata(scheme_name, code):
-    """AMC-neutral metadata. Do not apply one AMC's URL pattern to every fund house."""
+    """Fetch verified metadata from the AMC's own factsheet where supported."""
     scheme=scheme_metadata(code)
-    return {"fund_house":scheme.get("fund_house",""), "scheme_category":scheme.get("scheme_category",""), "benchmark":"", "benchmark_returns":{}, "aum":"", "managers":"", "holdings":[], "source":"https://www.amfiindia.com/online-center/download-factsheets"}
+    result={"fund_house":scheme.get("fund_house",""), "scheme_category":scheme.get("scheme_category",""), "benchmark":"", "benchmark_returns":{}, "aum":"", "managers":"", "holdings":[], "source":"https://www.amfiindia.com/online-center/download-factsheets"}
+    if "nippon" not in (scheme.get("fund_house","")+" "+scheme_name).lower():
+        return result
+    # Nippon publishes a scheme-specific factsheet PDF. Discover the current
+    # link from the official scheme page instead of hard-coding a dated PDF.
+    page="https://mf.nipponindiaim.com/FundsAndPerformance/Pages/NipponIndia-Small-Cap-Fund.aspx"
+    try:
+        html=fetch(page).decode("utf-8","replace")
+        links=re.findall(r'href=["\\']([^"\\']*NipponIndia-Small-Cap-Fund-MF-Factsheet-[^"\\']*\\.pdf)["\\']',html,re.I)
+        if not links:
+            links=re.findall(r'href=["\\']([^"\\']*FundwiseFactsheet/[^"\\']+\\.pdf)["\\']',html,re.I)
+        if not links:
+            links=["https://mf.nipponindiaim.com/InvestorServices/FundwiseFactsheet/NipponIndia-Small-Cap-Fund-MF-Factsheet-2026.pdf"]
+        pdf_url=urllib.parse.urljoin(page,links[0])
+        pdf=fetch(pdf_url)
+        try:
+            from pypdf import PdfReader
+            import io
+            text="\\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(pdf)).pages)
+        except Exception as e:
+            print("Nippon factsheet PDF parsing unavailable:",repr(e))
+            return result
+        def capture(pattern):
+            m=re.search(pattern,text,re.I|re.S)
+            return clean(m.group(1)) if m else ""
+        result["benchmark"]=capture(r"Benchmark Name:\\s*(.+)")
+        result["aum"]=capture(r"AUM:\\s*₹?\\s*([0-9,]+(?:\\.[0-9]+)?\\s*Cr)")
+        result["managers"]=capture(r"Name of Fund Managers\\s*(?:•\\s*)?(.+?)(?:Total Experience|Managing Since)")
+        # Keep only the scheme's regular-plan CAGR and the benchmark CAGR.
+        for years in (3,5):
+            m=re.search(r"Returns for last "+str(years)+r"\\s*years?\\s*(?:Scheme Returns %\\s*- Regular)?\\s*([0-9]+\\.[0-9]+)\\s+[0-9]+\\.[0-9]+\\s+([0-9]+\\.[0-9]+)",text,re.I|re.S)
+            if m: result["benchmark_returns"][years]=m.group(2)+"%"
+        hold=re.search(r"Top 10 Holdings.*?% to Net Assets(.*?)(?:Additional Information|$)",text,re.I|re.S)
+        if hold:
+            result["holdings"]=[clean(x) for x in re.findall(r"\\d+\\s+([^\\n]+?\\s+[0-9]+\\.[0-9]+%)",hold.group(1))[:10]]
+        result["source"]=pdf_url
+    except Exception as e:
+        print("Nippon factsheet lookup failed:",repr(e))
+    return result
 
 def main():
     rows=amfi_rows()
@@ -129,6 +167,17 @@ def main():
             telegram_send(body,keyboard); return
         body="I couldn't find this Regular Plan – Growth scheme in AMFI's latest NAV file. Please check the scheme name."
         telegram_send(body); return
+    # Search results do not include NAV. Always hydrate the selected scheme
+    # from MFAPI before formatting, even when the code came from search.
+    if not scheme.get("nav"):
+        try:
+            detail=json.loads(fetch("https://api.mfapi.in/mf/"+urllib.parse.quote(scheme["code"])))
+            latest=(detail.get("data") or [{}])[0]
+            scheme["nav"]=latest.get("nav","")
+            scheme["date"]=latest.get("date","")
+            scheme["name"]=clean((detail.get("meta") or {}).get("scheme_name",scheme["name"]))
+        except Exception as e:
+            print("Latest NAV hydration failed:",repr(e))
     ret,endd=trailing(scheme["code"])
     meta=amc_metadata(scheme["name"],scheme["code"])
     lines=[f"📊 <b>{scheme['name']}</b>","",
@@ -136,11 +185,12 @@ def main():
            "<pre>Period    Scheme    Benchmark"]
     for y in (3,5,7,10):
         val=f"{fmt(ret[y])}%" if y in ret else "N/A"
-        lines.append(f"{y:<9}{val:<10}N/A")
+        benchmark=meta.get("benchmark_returns",{}).get(y,"N/A")
+        lines.append(f"{y:<9}{val:<10}{benchmark}")
     lines += ["</pre>",f"<b>AMC</b> {meta.get('fund_house') or 'Not identified'}",f"<b>3. Benchmark</b> {meta.get('benchmark') or 'Not yet verified from latest AMC factsheet'}",
               f"<b>4. AUM</b> {meta.get('aum') or 'Not yet verified from latest scheme disclosure'}",
               f"<b>5. Fund Manager</b> {meta.get('managers') or 'Not yet verified from latest AMC factsheet'}",
-              "<b>6. Top 10 Holdings</b> Not yet verified from latest portfolio disclosure","",
+              "<b>6. Top 10 Holdings</b> "+(" | ".join(meta["holdings"]) if meta.get("holdings") else "Not yet verified from latest portfolio disclosure"),"",
               '<a href="https://www.amfiindia.com/online-center/download-factsheets">AMC factsheets</a> | <a href="https://www.amfiindia.com/online-center/portfolio-disclosure">Portfolio disclosures</a>',"",
               f"<i>Scheme NAV: AMFI. Historical NAV through {endd:%d-%b-%Y}.</i>" if endd else "<i>AMFI NAV source.</i>"]
     telegram_send("\n".join(lines))
