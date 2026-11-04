@@ -135,19 +135,19 @@ def amc_metadata(scheme_name, code):
         try:
             from pypdf import PdfReader
             import io
-            text="\\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(pdf)).pages)
+            text="\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(pdf)).pages)
         except Exception as e:
             print("Nippon factsheet PDF parsing unavailable:",repr(e))
             return result
         def capture(pattern):
             m=re.search(pattern,text,re.I|re.S)
             return clean(m.group(1)) if m else ""
-        result["benchmark"]=capture(r"Benchmark Name:\\s*(.+)")
-        result["aum"]=capture(r"AUM:\\s*₹?\\s*([0-9,]+(?:\\.[0-9]+)?\\s*Cr)")
-        result["managers"]=capture(r"Name of Fund Managers\\s*(?:•\\s*)?(.+?)(?:Total Experience|Managing Since)")
+        result["benchmark"]=capture(r"Benchmark Name:\s*(.+)")
+        result["aum"]=capture(r"AUM:\s*₹?\s*([0-9,]+(?:\.[0-9]+)?\s*Cr)")
+        result["managers"]=capture(r"Name of Fund Managers\s*(?:•\s*)?(.+?)(?:Total Experience|Managing Since)")
         # Keep only the scheme's regular-plan CAGR and the benchmark CAGR.
         for years in (3,5):
-            m=re.search(r"Returns for last "+str(years)+r"\\s*years?\\s*(?:Scheme Returns %\\s*- Regular)?\\s*([0-9]+\\.[0-9]+)\\s+[0-9]+\\.[0-9]+\\s+([0-9]+\\.[0-9]+)",text,re.I|re.S)
+            m=re.search(r"Returns for last "+str(years)+r"\s*years?\s*(?:Scheme Returns %\s*- Regular)?\s*([0-9]+\.[0-9]+)\s+[0-9]+\.[0-9]+\s+([0-9]+\.[0-9]+)",text,re.I|re.S)
             if m: result["benchmark_returns"][years]=m.group(2)+"%"
         hold=re.search(r"Top 10 Holdings.*?% to Net Assets(.*?)(?:Additional Information|$)",text,re.I|re.S)
         if hold:
