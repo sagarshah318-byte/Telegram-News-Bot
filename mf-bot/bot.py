@@ -184,6 +184,20 @@ def _parse_generic_factsheet(text, result, scheme_name):
     if not result.get("managers"):
         manager=first(r"(?:fund\s+manager(?:s)?|name\s+of\s+fund\s+manager(?:s)?)\s*[:\-]\s*([A-Z][A-Za-z .,&'-]{2,100})")
         if manager: result["managers"]=manager
+    # Benchmark returns are reported by each AMC in its factsheet. Capture only
+    # clearly labelled rows and leave unsupported periods blank.
+    for years in (3,5,7,10):
+        if years in result.get("benchmark_returns",{}):
+            continue
+        patterns=[
+            r"(?:returns?\s+for\s+last\s+)"+str(years)+r"\s+years?\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",
+            r"(?:last\s+)?"+str(years)+r"\s+years?\s+([\d.]+)%?\s+([\d.]+)%?\s+([\d.]+)%?"
+        ]
+        for pattern in patterns:
+            hit=re.search(pattern,section,re.I)
+            if hit:
+                result.setdefault("benchmark_returns",{})[years]=hit.group(3)+"%"
+                break
     if not result.get("holdings"):
         m=re.search(r"(?:top\s+10\s+holdings|portfolio\s+holdings)(.*?)(?:sector\s+allocation|asset\s+allocation|industry\s+allocation|disclaimer|additional\s+information)",section,re.I)
         if m:
