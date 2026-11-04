@@ -7,6 +7,15 @@ on:
     # Keep the existing weekday BSE price-band PDF schedule at 19:30 IST
     - cron: "0 14 * * 1-5"
   workflow_dispatch:
+    inputs:
+      test_from:
+        description: "Backfill start time with timezone, e.g. 2026-11-04T08:00:00+05:30"
+        required: false
+        type: string
+      test_to:
+        description: "Backfill end time with timezone"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -29,9 +38,11 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_FROM: ${{ inputs.test_from }}
+          TEST_TO: ${{ inputs.test_to }}
         run: python redbox-bot/bot.py
       - name: Send new BSE price band notice PDFs
-        if: (github.event_name == 'schedule' && github.event.schedule == '0 14 * * 1-5') || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'schedule' && github.event.schedule == '0 14 * * 1-5'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
