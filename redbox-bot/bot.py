@@ -15,8 +15,9 @@ import xml.etree.ElementTree as ET
 USERNAME = "REDBOXINDIA"
 STATE_PATH = "redbox-bot/state.json"
 FEEDS = [
-    "https://fixupx.com/" + USERNAME + "/feed.xml",
+    # fxtwitter is currently the working RSS endpoint; keep fixupx as fallback.
     "https://fxtwitter.com/" + USERNAME + "/feed.xml",
+    "https://fixupx.com/" + USERNAME + "/feed.xml",
 ]
 ATOM = "{http://www.w3.org/2005/Atom}"
 STATUS_RE = re.compile(r"/status/(\d+)", re.IGNORECASE)
