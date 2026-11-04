@@ -28,10 +28,26 @@ def fmt(v,n=2):
     except Exception: return "Not available"
 
 def amfi_rows(query):
-    """Search MFAPI's all-AMC scheme catalogue for the requested fund."""
+    """Search MFAPI's all-AMC scheme catalogue, with aliases for renamed SBI children's funds."""
     q=clean(query)
     if "ppfas" in q.lower():
         q=re.sub(r"ppfas","Parag Parikh",q,flags=re.I)
+    # Older names are still commonly used, but AMFI now lists these under
+    # SBI Children's Fund. Resolve both current Regular Growth options.
+    child_alias = ("children" in q.lower() and ("gift" in q.lower() or "magnum" in q.lower()))
+    if child_alias:
+        out=[]
+        for code in ("148489", "101169"):
+            try:
+                detail=json.loads(fetch(f"{MFAPI_BASE}/mf/{code}"))
+                meta=detail.get("meta") or {}
+                name=clean(meta.get("scheme_name", ""))
+                if name and "growth" in name.lower() and "direct" not in name.lower():
+                    out.append({"code":code,"name":name,"nav":"","date":""})
+            except Exception as e:
+                print("SBI Children's Fund alias lookup failed:",code,repr(e))
+        print("SBI Children's Fund alias matches:",len(out))
+        return out
     if q.isdigit():
         return []
     url=f"{MFAPI_BASE}/mf/search?q="+urllib.parse.quote(q)
@@ -47,6 +63,9 @@ def amfi_rows(query):
 
 def find_scheme(rows,q):
     q=clean(q).lower()
+    # Map legacy SBI children's-fund names to the current scheme family.
+    if "children" in q and ("gift" in q or "magnum" in q):
+        q="sbi children fund"
     # PPFAS is the fund-house alias for Parag Parikh Flexi Cap Fund.
     if "ppfas" in q and "flexi" in q and "cap" in q:
         q="122640"
