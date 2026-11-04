@@ -1,6 +1,10 @@
 name: REDBOXINDIA to Telegram
 
 on:
+  # Run immediately when this workflow is repaired or updated.
+  push:
+    paths:
+      - '.github/workflows/redbox-telegram.yml'
   schedule:
     # Poll Redbox RSS every 5 minutes for faster Telegram alerts
     - cron: "*/5 * * * *"
