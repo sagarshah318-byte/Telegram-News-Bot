@@ -2,7 +2,9 @@ name: REDBOXINDIA to Telegram
 
 on:
   schedule:
-    - cron: "30 2-17 * * *"
+    # Poll Redbox RSS every 5 minutes for faster Telegram alerts
+    - cron: "*/5 * * * *"
+    # Keep the existing weekday BSE price-band PDF schedule at 19:30 IST
     - cron: "0 14 * * 1-5"
   workflow_dispatch:
 
