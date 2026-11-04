@@ -6,8 +6,8 @@ on:
     paths:
       - '.github/workflows/redbox-telegram.yml'
   schedule:
-    # Poll Redbox RSS every 5 minutes for faster Telegram alerts
-    - cron: "*/5 * * * *"
+    # Poll every 5 minutes, offset from the busiest top-of-hour minute
+    - cron: "2-59/5 * * * *"
     # Keep the existing weekday BSE price-band PDF schedule at 19:30 IST
     - cron: "0 14 * * 1-5"
   workflow_dispatch:
