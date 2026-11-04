@@ -151,11 +151,18 @@ def _dsp_small_cap_metadata(result):
     return result
 
 def _tigzig_metadata(code, result):
-    """Fetch scheme details including AUM, benchmark and managers where available."""
+    """Use AMFI-sourced scheme details for AUM, benchmark and manager where published."""
     url="https://api.tigzig.com/mf/v1/schemes/"+urllib.parse.quote(code)+"/details?view=full"
     try:
         payload=json.loads(fetch(url))
         root=payload.get("data") or {}
+        daily=root.get("amfi_daily") or {}
+        ssd=root.get("ssd") or {}
+        aum=daily.get("fund_aum_cr_all_plans")
+        aum_date=daily.get("aum_date","")
+        if aum not in (None,"") and not result.get("aum"):
+            result["aum"]="₹"+fmt(aum,2)+" Cr"+(" (as of "+str(aum_date)+")" if aum_date else "")
+        # Search the scheme summary document's actual fields, including list-valued manager fields.
         def walk(obj):
             if isinstance(obj,dict):
                 for k,v in obj.items():
@@ -164,18 +171,21 @@ def _tigzig_metadata(code, result):
             elif isinstance(obj,list):
                 for v in obj:
                     yield from walk(v)
-        fields=list(walk(root))
+        fields=list(walk(ssd))
         def pick(keys):
             for key,value in fields:
                 if any(x in key for x in keys) and value not in (None,"",[],{}):
                     if isinstance(value,(str,int,float)):
                         return clean(str(value))
+                    if isinstance(value,list):
+                        vals=[clean(str(x)) for x in value if isinstance(x,(str,int,float)) and clean(str(x))]
+                        if vals: return ", ".join(vals[:4])
+                    if isinstance(value,dict):
+                        vals=[clean(str(x)) for x in value.values() if isinstance(x,(str,int,float)) and clean(str(x))]
+                        if vals: return ", ".join(vals[:4])
             return ""
-        aum=pick(("fund_aum_cr","aum_cr","aum_in_cr","fund_aum"))
-        benchmark=pick(("benchmark_name","primary_benchmark","benchmark"))
-        manager=pick(("fund_manager","manager_name","managers"))
-        if aum and not result.get("aum"):
-            result["aum"]="₹"+aum+" Cr (TIGZIG scheme details)"
+        benchmark=pick(("benchmark","bench_mark"))
+        manager=pick(("fund_manager","manager_name","manager"))
         if benchmark and not result.get("benchmark"):
             result["benchmark"]=benchmark
         if manager and not result.get("managers"):
@@ -184,6 +194,7 @@ def _tigzig_metadata(code, result):
     except Exception as e:
         print("TIGZIG scheme details lookup failed:",repr(e))
     return result
+
 
 def amc_metadata(scheme_name, code):
     """Use only metadata actually supplied by MFAPI. Do not invent missing factsheet data."""
