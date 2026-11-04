@@ -114,41 +114,118 @@ def scheme_metadata(code):
         print("Scheme metadata lookup failed:",repr(e))
         return {}
 
-def amc_metadata(scheme_name, code):
-    """Extract verified Nippon scheme data from the official linked factsheet."""
-    scheme=scheme_metadata(code)
-    result={"fund_house":scheme.get("fund_house",""), "scheme_category":scheme.get("scheme_category",""), "benchmark":"", "benchmark_returns":{}, "aum":"", "managers":"", "holdings":[], "source":"https://www.amfiindia.com/online-center/download-factsheets"}
-    if "nippon" not in (scheme.get("fund_house","")+" "+scheme_name).lower():
-        return result
-    pdf_url="https://mf.nipponindiaim.com/InvestorServices/FundwiseFactsheet/NipponIndia-Small-Cap-Fund-MF-Factsheet-2026.pdf"
+def _pdf_text(pdf_bytes):
+    """Extract text from an official AMC factsheet PDF."""
+    from pypdf import PdfReader
+    import io
+    reader=PdfReader(io.BytesIO(pdf_bytes))
+    return clean(" ".join(page.extract_text() or "" for page in reader.pages))
+
+def _amfi_amc_page(fund_house):
+    """Find the AMC's factsheet destination through AMFI's central directory."""
+    directory="https://www.amfiindia.com/online-center/download-factsheets"
+    html=fetch(directory).decode("utf-8","replace")
+    wanted=re.sub(r"[^a-z0-9]","",fund_house.lower().replace("mutual fund",""))
+    for anchor in re.findall(r"<a\b[^>]*>.*?</a>",html,re.I|re.S):
+        label=" ".join(re.findall(r"(?:alt|title)\s*=\s*['\"]([^'\"]+)",anchor,re.I))
+        label += " " + re.sub(r"<[^>]+>"," ",anchor)
+        normalized=re.sub(r"[^a-z0-9]","",label.lower().replace("mutual fund",""))
+        if wanted and (wanted in normalized or normalized in wanted):
+            href=re.search(r"href\s*=\s*['\"]([^'\"]+)",anchor,re.I)
+            if href:
+                return urllib.parse.urljoin(directory,unescape(href.group(1)))
+    return ""
+
+def _factsheet_pdf_links(page_url, scheme_name):
+    """Resolve PDF links from an AMC factsheet landing page."""
+    if not page_url:
+        return []
+    if page_url.lower().split("?")[0].endswith(".pdf"):
+        return [page_url]
     try:
-        from pypdf import PdfReader
-        import io
-        pdf=fetch(pdf_url)
-        raw="\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(pdf)).pages)
-        text=clean(raw)
-        def one(pattern):
-            m=re.search(pattern,text,re.I)
-            return clean(m.group(1)) if m else ""
-        result["benchmark"]=one(r"Benchmark Name:\s*(.*?)\s*NAV as on")
-        aum=one(r"AUM:\s*[\x60₹]?\s*([\d,]+(?:\.\d+)?)\s*Cr")
-        if aum:
-            result["aum"]="₹"+aum+" Cr"
-        manager=one(r"Name of Fund Managers\s*•?\s*(?:Mr\.\s*)?(.+?)\s+Total Experience")
-        if manager:
-            result["managers"]=manager
-        for years in (3,5):
-            m=re.search(r"Returns for last\s+"+str(years)+r"\s+years\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",text,re.I)
-            if m:
-                result["benchmark_returns"][years]=m.group(3)+"%"
-        section=one(r"Top 10 Holdings\s*% to Net Assets\s*(.*?)\s*Additional Information pertaining")
-        if section:
-            result["holdings"]=[clean(name)+" "+weight for name,weight in re.findall(r"\d{1,2}\s+(.+?)\s+(\d+\.\d+%)",section)]
-            result["holdings"]=result["holdings"][:10]
-        result["source"]=pdf_url
-        print("Nippon factsheet fields:",json.dumps({k:v for k,v in result.items() if k!="source"}))
+        html=fetch(page_url).decode("utf-8","replace")
     except Exception as e:
-        print("Nippon factsheet lookup/parsing failed:",repr(e))
+        print("AMC factsheet landing page failed:",repr(e))
+        return []
+    links=[]
+    for href,label in re.findall(r"<a\b[^>]*href\s*=\s*['\"]([^'\"]+)['\"][^>]*>(.*?)</a>",html,re.I|re.S):
+        absolute=urllib.parse.urljoin(page_url,unescape(href))
+        label=clean(re.sub(r"<[^>]+>"," ",label))
+        candidate=(absolute+" "+label).lower()
+        if ".pdf" in absolute.lower() or "factsheet" in candidate or "fact-sheet" in candidate or "monthly" in candidate:
+            links.append(absolute)
+    # Prefer a scheme-specific factsheet, then the newest/general monthly factsheet.
+    tokens=[x for x in re.findall(r"[a-z0-9]+",scheme_name.lower()) if len(x)>3]
+    def score(url):
+        u=url.lower()
+        return (sum(t in u for t in tokens), "factsheet" in u or "fact-sheet" in u, "monthly" in u)
+    return sorted(dict.fromkeys(links),key=score,reverse=True)[:8]
+
+def _parse_generic_factsheet(text, result, scheme_name):
+    """Conservative parser for common AMC factsheet labels; unknown fields stay blank."""
+    text=clean(text)
+    # Restrict extraction to the selected scheme's nearby section where possible.
+    name_tokens=[x for x in re.findall(r"[a-z0-9]+",scheme_name.lower()) if len(x)>3]
+    lower=text.lower()
+    positions=[lower.find(x) for x in name_tokens if lower.find(x)>=0]
+    if positions:
+        pos=min(positions)
+        section=text[max(0,pos-1200):pos+10000]
+    else:
+        section=text
+    def first(pattern, source=section):
+        m=re.search(pattern,source,re.I)
+        return clean(m.group(1)) if m else ""
+    if not result.get("benchmark"):
+        result["benchmark"]=first(r"(?:benchmark(?:\s+index)?|tier\s*1\s*benchmark)\s*[:\-]\s*([A-Za-z0-9 &().,'/+_-]{4,100})")
+    if not result.get("aum"):
+        aum=first(r"(?:scheme\s+)?(?:month[- ]end\s+)?AUM\s*[:\-]?\s*(?:Rs\.?|₹|INR)?\s*([\d,]+(?:\.\d+)?)\s*(?:Cr|Crore)")
+        if aum: result["aum"]="₹"+aum+" Cr"
+    if not result.get("managers"):
+        manager=first(r"(?:fund\s+manager(?:s)?|name\s+of\s+fund\s+manager(?:s)?)\s*[:\-]\s*([A-Z][A-Za-z .,&'-]{2,100})")
+        if manager: result["managers"]=manager
+    if not result.get("holdings"):
+        m=re.search(r"(?:top\s+10\s+holdings|portfolio\s+holdings)(.*?)(?:sector\s+allocation|asset\s+allocation|industry\s+allocation|disclaimer|additional\s+information)",section,re.I)
+        if m:
+            block=m.group(1)
+            parsed=[]
+            for line in re.split(r"(?<=%)\s+",block):
+                hit=re.search(r"([A-Za-z][A-Za-z0-9 .&,'()/-]{2,80}?)\s+(\d{1,2}(?:\.\d{1,2})?)\s*%",line)
+                if hit:
+                    parsed.append(clean(hit.group(1))+" "+hit.group(2)+"%")
+            result["holdings"]=parsed[:10]
+    return result
+
+def amc_metadata(scheme_name, code):
+    """Get scheme metadata for every AMC and enrich it from AMFI-listed AMC factsheets."""
+    scheme=scheme_metadata(code)
+    result={"fund_house":scheme.get("fund_house",""), "scheme_category":scheme.get("scheme_category",""),
+            "benchmark":"", "benchmark_returns":{}, "aum":"", "managers":"", "holdings":[],
+            "source":"https://www.amfiindia.com/online-center/download-factsheets"}
+    # AMC identity/category are scheme-level metadata and are available for all supported AMCs.
+    if not result["fund_house"]:
+        return result
+    try:
+        landing=_amfi_amc_page(result["fund_house"])
+        if not landing:
+            print("AMFI factsheet directory did not expose an AMC link:",result["fund_house"])
+            return result
+        for pdf_url in _factsheet_pdf_links(landing,scheme_name):
+            try:
+                text=_pdf_text(fetch(pdf_url))
+                if not text:
+                    continue
+                parsed=_parse_generic_factsheet(text,result,scheme_name)
+                result=parsed
+                result["source"]=pdf_url
+                # Stop only when the key scheme-level fields have been found.
+                if result.get("benchmark") and (result.get("aum") or result.get("managers") or result.get("holdings")):
+                    break
+            except Exception as e:
+                print("AMC factsheet PDF parse failed:",pdf_url,repr(e))
+        print("AMC factsheet fields:",json.dumps({k:v for k,v in result.items() if k!="source"}))
+    except Exception as e:
+        print("AMC factsheet discovery failed:",result["fund_house"],repr(e))
     return result
 
 def main():
