@@ -210,6 +210,34 @@ def _parse_generic_factsheet(text, result, scheme_name):
             result["holdings"]=parsed[:10]
     return result
 
+def _dsp_scheme_metadata(scheme_name, result):
+    """DSP's scheme pages expose benchmark, AUM, portfolio and manager in page content."""
+    slug=urllib.parse.quote(scheme_name.lower().replace(" - regular plan - growth","").replace("regular plan - growth","").strip().replace(" ","-"))
+    # DSP's public scheme route uses a stable scheme slug; the Small Cap route is verified.
+    if "small cap" in scheme_name.lower():
+        url="https://www.dspim.com/invest/mutual-fund-schemes/equity-funds/small-cap-fund/dspmc-direct-growth"
+    else:
+        url="https://www.dspim.com/invest/mutual-fund-schemes/equity-funds/"+slug+"/"+slug+"-direct-growth"
+    html=fetch(url).decode("utf-8","replace")
+    page=clean(re.sub(r"<script\b.*?</script>|<style\b.*?</style>"," ",html,flags=re.I|re.S))
+    def grab(pattern):
+        m=re.search(pattern,page,re.I)
+        return clean(m.group(1)) if m else ""
+    result["benchmark"]=grab(r"Benchmark:\s*([^<]{3,100})") or result.get("benchmark","")
+    aum=grab(r"Total AUM\s*₹?\s*([\d,]+(?:\.\d+)?)\s*crores")
+    if aum: result["aum"]="₹"+aum+" Cr"
+    manager=grab(r"Fund managers?:\s*(?:Image:\s*)?([A-Z][A-Za-z .'-]{2,60})")
+    if manager: result["managers"]=manager
+    holdings=[]
+    # DSP scheme pages publish the portfolio table in the page body.
+    m=re.search(r"Portfolio as of.{0,100}?Holdings\s*\|\s*Weight %(.{0,12000}?)(?:View All Holdings|Sectors Weight)",page,re.I)
+    if m:
+        for name,weight in re.findall(r"([A-Z][A-Za-z0-9 &.,'()-]{2,90}?)\s*\\|\s*(\d+(?:\.\d+)?)\s*%",m.group(1)):
+            holdings.append(clean(name)+" "+weight+"%")
+    if holdings: result["holdings"]=holdings[:10]
+    result["source"]=url
+    return result
+
 def amc_metadata(scheme_name, code):
     """Get scheme metadata for every AMC and enrich it from AMFI-listed AMC factsheets."""
     scheme=scheme_metadata(code)
@@ -219,6 +247,13 @@ def amc_metadata(scheme_name, code):
     # AMC identity/category are scheme-level metadata and are available for all supported AMCs.
     if not result["fund_house"]:
         return result
+    if "dsp" in result["fund_house"].lower():
+        try:
+            result=_dsp_scheme_metadata(scheme_name,result)
+            print("DSP official scheme fields:",json.dumps({k:v for k,v in result.items() if k!="source"}))
+            return result
+        except Exception as e:
+            print("DSP official scheme lookup failed:",repr(e))
     try:
         landing=_amfi_amc_page(result["fund_house"])
         if not landing:
