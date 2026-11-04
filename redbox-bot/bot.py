@@ -188,7 +188,37 @@ def save_state(seen_ids):
     changed = subprocess.run(["git", "diff", "--cached", "--quiet"])
     if changed.returncode == 1:
         subprocess.run(["git", "commit", "-m", "Update delivered RSS post history"], check=True)
-        subprocess.run(["git", "push"], check=True)
+        # Another workflow or a code update may have advanced main after checkout.
+        # Merge both state histories and retry instead of failing after a Telegram send.
+        for attempt in range(1, 4):
+            pushed = subprocess.run(["git", "push"])
+            if pushed.returncode == 0:
+                break
+            if attempt == 3:
+                raise RuntimeError("Unable to push RSS history after 3 attempts")
+            subprocess.run(["git", "fetch", "origin", "main"], check=True)
+            local_ids = json.load(open(STATE_PATH, encoding="utf-8")).get("seen_ids", [])
+            try:
+                remote_raw = subprocess.check_output(
+                    ["git", "show", "origin/main:" + STATE_PATH], text=True
+                )
+                remote_ids = json.loads(remote_raw).get("seen_ids", [])
+            except subprocess.CalledProcessError:
+                remote_ids = []
+            merged_ids = list(dict.fromkeys(remote_ids + local_ids))[-500:]
+            subprocess.run(["git", "reset", "--hard", "origin/main"], check=True)
+            with open(STATE_PATH, "w", encoding="utf-8") as file:
+                json.dump({"seen_ids": merged_ids}, file, indent=2)
+                file.write("\\n")
+            subprocess.run(["git", "add", STATE_PATH], check=True)
+            staged = subprocess.run(["git", "diff", "--cached", "--quiet"])
+            if staged.returncode == 1:
+                subprocess.run(
+                    ["git", "commit", "-m", "Merge delivered RSS post history"],
+                    check=True,
+                )
+            elif staged.returncode != 0:
+                raise RuntimeError("Unable to inspect merged RSS history")
     elif changed.returncode != 0:
         raise RuntimeError("Unable to inspect staged state changes")
 
@@ -260,11 +290,19 @@ def main():
             print("Forwarded test-window entry: " + (entry.get("link") or entry["id"]))
             time.sleep(0.5)
 
+        # Record only entries at or before the backfill end time. Later posts
+        # remain eligible for the normal five-minute poll.
         for entry in entries:
             entry_id = entry.get("id")
-            if entry_id and entry_id not in seen_set:
-                seen.append(entry_id)
-                seen_set.add(entry_id)
+            published = entry.get("published", "").strip()
+            if not entry_id or not published:
+                continue
+            try:
+                if parse_published(published) <= end_at and entry_id not in seen_set:
+                    seen.append(entry_id)
+                    seen_set.add(entry_id)
+            except (TypeError, ValueError, OverflowError):
+                continue
         save_state(seen)
         if not matching:
             print("No feed entries carried publication timestamps inside the requested hour.")
