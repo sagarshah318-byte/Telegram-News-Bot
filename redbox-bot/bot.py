@@ -269,7 +269,7 @@ def main():
                 continue
             try:
                 published_at = parse_published(published)
-                if start_at <= published_at <= end_at:
+                if start_at <= published_at <= end_at and entry["id"] not in seen_set:
                     matching.append(entry)
             except (TypeError, ValueError, OverflowError):
                 print("Skipping entry with unrecognized publication date: " + published)
