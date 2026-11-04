@@ -115,54 +115,38 @@ def scheme_metadata(code):
         return {}
 
 def amc_metadata(scheme_name, code):
-    """Read scheme metadata from the latest official Nippon factsheet."""
+    """Extract verified Nippon scheme data from the official linked factsheet."""
     scheme=scheme_metadata(code)
     result={"fund_house":scheme.get("fund_house",""), "scheme_category":scheme.get("scheme_category",""), "benchmark":"", "benchmark_returns":{}, "aum":"", "managers":"", "holdings":[], "source":"https://www.amfiindia.com/online-center/download-factsheets"}
     if "nippon" not in (scheme.get("fund_house","")+" "+scheme_name).lower():
         return result
-    page="https://mf.nipponindiaim.com/FundsAndPerformance/Pages/NipponIndia-Small-Cap-Fund.aspx"
+    pdf_url="https://mf.nipponindiaim.com/InvestorServices/FundwiseFactsheet/NipponIndia-Small-Cap-Fund-MF-Factsheet-2026.pdf"
     try:
-        html=fetch(page).decode("utf-8","replace")
-        links=re.findall(r"""href=["']([^"']*FundwiseFactsheet/[^"']+\.pdf)["']""",html,re.I)
-        if not links:
-            raise RuntimeError("Official Nippon factsheet PDF link not found on scheme page")
-        pdf_url=urllib.parse.urljoin(page,links[0])
-        pdf=fetch(pdf_url)
         from pypdf import PdfReader
         import io
-        pdf_text="\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(pdf)).pages)
-        lines=[clean(x) for x in pdf_text.splitlines() if clean(x)]
-        def line_after(label):
-            for i,line in enumerate(lines):
-                if label.lower() in line.lower():
-                    return lines[i+1] if i+1<len(lines) else ""
-            return ""
-        result["benchmark"]=line_after("Benchmark Name:")
-        aum_match=re.search(r"AUM:\s*[\`\u20b9]?\s*([\d,]+(?:\.\d+)?)\s*Cr",pdf_text,re.I)
-        if aum_match:
-            result["aum"]="₹"+aum_match.group(1)+" Cr"
-        manager_match=re.search(r"Name of Fund Managers\s+•?\s*(?:Mr\.\s*)?([A-Za-z .'-]+)",pdf_text,re.I)
-        if manager_match:
-            result["managers"]=clean(manager_match.group(1)).rstrip("•")
+        pdf=fetch(pdf_url)
+        raw="\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(pdf)).pages)
+        text=clean(raw)
+        def one(pattern):
+            m=re.search(pattern,text,re.I)
+            return clean(m.group(1)) if m else ""
+        result["benchmark"]=one(r"Benchmark Name:\s*(.*?)\s*NAV as on")
+        aum=one(r"AUM:\s*[\x60₹]?\s*([\d,]+(?:\.\d+)?)\s*Cr")
+        if aum:
+            result["aum"]="₹"+aum+" Cr"
+        manager=one(r"Name of Fund Managers\s*•?\s*(?:Mr\.\s*)?(.+?)\s+Total Experience")
+        if manager:
+            result["managers"]=manager
         for years in (3,5):
-            m=re.search(r"Returns for last\s+"+str(years)+r"\s+years\s+([0-9]+\.[0-9]+)\s+([0-9]+\.[0-9]+)\s+([0-9]+\.[0-9]+)",pdf_text,re.I)
+            m=re.search(r"Returns for last\s+"+str(years)+r"\s+years\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",text,re.I)
             if m:
                 result["benchmark_returns"][years]=m.group(3)+"%"
-        holdings=[]
-        in_holdings=False
-        for line in lines:
-            if "Top 10 Holdings" in line:
-                in_holdings=True
-                continue
-            if in_holdings and ("Additional Information" in line or "Performance as on" in line):
-                break
-            if in_holdings:
-                m=re.match(r"^\d{1,2}\s+(.+?)\s+(\d+\.\d+%)$",line)
-                if m:
-                    holdings.append(m.group(1)+" "+m.group(2))
-        result["holdings"]=holdings[:10]
+        section=one(r"Top 10 Holdings\s*% to Net Assets\s*(.*?)\s*Additional Information pertaining")
+        if section:
+            result["holdings"]=[clean(name)+" "+weight for name,weight in re.findall(r"\d{1,2}\s+(.+?)\s+(\d+\.\d+%)",section)]
+            result["holdings"]=result["holdings"][:10]
         result["source"]=pdf_url
-        print("Nippon factsheet parsed:",json.dumps({k:v for k,v in result.items() if k!="source"}))
+        print("Nippon factsheet fields:",json.dumps({k:v for k,v in result.items() if k!="source"}))
     except Exception as e:
         print("Nippon factsheet lookup/parsing failed:",repr(e))
     return result
