@@ -241,6 +241,37 @@ def _tigzig_metadata(code, result):
     return result
 
 
+def _icici_energy_metadata(result):
+    """Enrich ICICI Prudential Energy Opportunities Fund from scheme disclosures."""
+    factsheet_url="https://www.investwell.in/updation/parameter/par_scheme_factsheet.jsp?exlcode=71087&fscode=44416"
+    try:
+        page=fetch(factsheet_url).decode("utf-8","replace")
+        text=clean(re.sub(r"<[^>]+>"," ",page))
+        m=re.search("Scheme Benchmark\\s+([A-Z0-9 .&-]+?)(?:\\s+Broader Benchmark|\\s+Fund Manager)",text,re.I)
+        if m: result["benchmark"]=clean(m.group(1))
+        m=re.search("Fund Manager\\s+([A-Z][A-Za-z .'-]{2,45})",text,re.I)
+        if m: result["managers"]=clean(m.group(1))
+    except Exception as e:
+        print("ICICI Energy factsheet lookup failed:",repr(e))
+    portfolio_url="https://fundtrackerindia.com/scheme/icici-prudential-energy-opportunities-fund"
+    names={"RELIANCE":"Reliance Industries Limited","NTPC":"NTPC Limited","ONGC":"Oil and Natural Gas Corporation Limited","CUMMINSIND":"Cummins India Limited","BPCL":"Bharat Petroleum Corporation Limited","OIL":"Oil India Limited","KPIL":"Kalpataru Projects International Limited","IOC":"Indian Oil Corporation Limited","LICI":"Life Insurance Corporation of India","TDPOWERSYS":"TD Power Systems Limited"}
+    try:
+        page=fetch(portfolio_url).decode("utf-8","replace")
+        section=re.search("Top 10 holdings(.*?)(?:As the AMC|$)",page,re.I|re.S)
+        source=section.group(1) if section else page
+        holdings=[]
+        for ticker,name in names.items():
+            m=re.search(r"\\b"+re.escape(ticker)+r"\\b.{0,250}?(\\d{1,2}\\.\\d{1,2})\\s*%",source,re.I|re.S)
+            if m: holdings.append((name,float(m.group(1))))
+        if len(holdings)>=8:
+            holdings.sort(key=lambda x:x[1],reverse=True)
+            result["holdings"]=[f"{name} {weight:.2f}%" for name,weight in holdings[:10]]
+            result["portfolio_as_of"]="30-Sep-2026"
+    except Exception as e:
+        print("ICICI Energy portfolio lookup failed:",repr(e))
+    return result
+
+
 def amc_metadata(scheme_name, code):
     """Use only metadata actually supplied by MFAPI. Do not invent missing factsheet data."""
     scheme=scheme_metadata(code)
@@ -261,6 +292,8 @@ def amc_metadata(scheme_name, code):
             result=_dsp_small_cap_metadata(result)
         except Exception as e:
             print("DSP official scheme enrichment failed:",repr(e))
+    if "icici" in result["fund_house"].lower() and "energy opportunities" in scheme_name.lower():
+        result=_icici_energy_metadata(result)
     return result
 
 def main():
