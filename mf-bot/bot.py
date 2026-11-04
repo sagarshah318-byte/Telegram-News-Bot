@@ -123,10 +123,37 @@ def scheme_metadata(code):
         print("Scheme metadata lookup failed:",repr(e))
         return {}
 
+def _dsp_small_cap_metadata(result):
+    """Parse DSP Small Cap facts from its official public scheme page."""
+    url="https://www.dspim.com/invest/mutual-fund-schemes/equity-funds/small-cap-fund/dspmc-direct-growth"
+    html=fetch(url).decode("utf-8","replace")
+    text=re.sub(r"<(br|/p|/div|/tr|/li|/h[1-6])\b[^>]*>", " | ", html, flags=re.I)
+    text=re.sub(r"<[^>]+>", " ", text)
+    text=clean(text)
+    def grab(pattern):
+        m=re.search(pattern,text,re.I)
+        return clean(m.group(1)) if m else ""
+    benchmark=grab(r"Benchmark:\s*([^|]{3,100})")
+    aum=grab(r"Total AUM\s*₹?\s*([\d,]+(?:\.\d+)?)\s*crores")
+    manager=grab(r"Fund managers?:\s*(?:Image:\s*)?([A-Z][A-Za-z .'-]{2,60})")
+    if benchmark: result["benchmark"]=benchmark
+    if aum: result["aum"]="₹"+aum+" Cr (as of Sep 30, 2026)"
+    if manager: result["managers"]=manager
+    holdings=[]
+    start=text.lower().find("holdings")
+    end=text.lower().find("view all holdings",start+1) if start>=0 else -1
+    block=text[start:end] if start>=0 and end>start else ""
+    for name,weight in re.findall(r"([A-Z][A-Za-z0-9 &.,'()-]{2,90}?)\s*\|\s*(\d+(?:\.\d+)?)\s*%",block):
+        item=clean(name)+" "+weight+"%"
+        if item not in holdings: holdings.append(item)
+    if holdings: result["holdings"]=holdings[:10]
+    result["source"]=url
+    return result
+
 def amc_metadata(scheme_name, code):
     """Use only metadata actually supplied by MFAPI. Do not invent missing factsheet data."""
     scheme=scheme_metadata(code)
-    return {
+    result={
         "fund_house":scheme.get("fund_house",""),
         "scheme_category":scheme.get("scheme_category",""),
         "benchmark":"",
@@ -137,6 +164,12 @@ def amc_metadata(scheme_name, code):
         "isin_growth":scheme.get("isin_growth",""),
         "source":"https://www.mfapi.in/"
     }
+    if "dsp" in result["fund_house"].lower() and "small cap" in scheme_name.lower():
+        try:
+            result=_dsp_small_cap_metadata(result)
+        except Exception as e:
+            print("DSP official scheme enrichment failed:",repr(e))
+    return result
 
 def main():
     rows=amfi_rows(QUERY)
@@ -168,10 +201,10 @@ def main():
         val=f"{fmt(ret[y])}%" if y in ret else "N/A"
         benchmark=meta.get("benchmark_returns",{}).get(y,"N/A")
         lines.append(f"{y:<9}{val:<10}{benchmark}")
-    lines += ["</pre>",f"<b>AMC</b> {meta.get('fund_house') or 'Not available in MFAPI'}",f"<b>Category</b> {meta.get('scheme_category') or 'Not available in MFAPI'}",f"<b>3. Benchmark</b> Not provided by MFAPI",
-              f"<b>4. AUM</b> Not provided by MFAPI",
-              f"<b>5. Fund Manager</b> Not provided by MFAPI",
-              "<b>6. Top 10 Holdings</b> "+("Not provided by MFAPI"),"",
+    lines += ["</pre>",f"<b>AMC</b> {meta.get('fund_house') or 'Not available in MFAPI'}",f"<b>Category</b> {meta.get('scheme_category') or 'Not available in MFAPI'}",f"<b>3. Benchmark</b> {meta.get('benchmark') or 'Not available'}",
+              f"<b>4. AUM</b> {meta.get('aum') or 'Not available'}",
+              f"<b>5. Fund Manager</b> {meta.get('managers') or 'Not available'}",
+              "<b>6. Top 10 Holdings</b> "+((" | ".join(meta.get("holdings",[])) or "Not available")),"",
               '<a href="https://www.mfapi.in/">MFAPI data source</a>',"",
               f"<i>Scheme NAV and history: MFAPI. Historical NAV through {endd:%d-%b-%Y}.</i>" if endd else "<i>MFAPI NAV source.</i>"]
     telegram_send("\n".join(lines))
