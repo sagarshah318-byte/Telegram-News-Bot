@@ -37,4 +37,6 @@ jobs:
           MF_BOT_TOKEN: ${{ secrets.MF_BOT_TOKEN }}
           MF_SCHEME: ${{ github.event.client_payload.scheme || inputs.scheme }}
           MF_CHAT_ID: ${{ github.event.client_payload.chat_id || inputs.chat_id }}
-        run: python mf-bot/bot.py
+        run: |
+          pip install pypdf
+          python mf-bot/bot.py
