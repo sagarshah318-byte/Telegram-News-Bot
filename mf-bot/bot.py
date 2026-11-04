@@ -27,27 +27,22 @@ def fmt(v,n=2):
     try: return f"{float(v):,.{n}f}"
     except Exception: return "Not available"
 
-def amfi_rows():
-    """Load the complete scheme catalogue from MFAPI's paginated endpoint."""
+def amfi_rows(query):
+    """Search MFAPI's all-AMC scheme catalogue for the requested fund."""
+    q=clean(query)
+    if "ppfas" in q.lower():
+        q=re.sub(r"ppfas","Parag Parikh",q,flags=re.I)
+    if q.isdigit():
+        return []
+    url=f"{MFAPI_BASE}/mf/search?q="+urllib.parse.quote(q)
+    page=json.loads(fetch(url))
     out=[]
-    limit=500
-    offset=0
-    while True:
-        url=f"{MFAPI_BASE}/mf?limit={limit}&offset={offset}"
-        page=json.loads(fetch(url))
-        if not isinstance(page,list) or not page:
-            break
-        for item in page:
-            code=str(item.get("schemeCode","")).strip()
-            name=clean(item.get("schemeName",""))
-            if code and name:
-                out.append({"code":code,"name":name,"nav":"","date":""})
-        if len(page)<limit:
-            break
-        offset += limit
-    if not out:
-        raise RuntimeError("MFAPI returned an empty scheme catalogue")
-    print("MFAPI scheme catalogue loaded:",len(out))
+    for item in page if isinstance(page,list) else []:
+        code=str(item.get("schemeCode","")).strip()
+        name=clean(item.get("schemeName",""))
+        if code and name:
+            out.append({"code":code,"name":name,"nav":"","date":""})
+    print("MFAPI search matches:",len(out))
     return out
 
 def find_scheme(rows,q):
@@ -144,7 +139,7 @@ def amc_metadata(scheme_name, code):
     }
 
 def main():
-    rows=amfi_rows()
+    rows=amfi_rows(QUERY)
     scheme,matches=find_scheme(rows,QUERY)
     if not scheme:
         if matches:
