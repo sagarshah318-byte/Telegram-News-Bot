@@ -125,9 +125,9 @@ def amc_metadata(scheme_name, code):
     page="https://mf.nipponindiaim.com/FundsAndPerformance/Pages/NipponIndia-Small-Cap-Fund.aspx"
     try:
         html=fetch(page).decode("utf-8","replace")
-        links=re.findall(r'href=["\\']([^"\\']*NipponIndia-Small-Cap-Fund-MF-Factsheet-[^"\\']*\\.pdf)["\\']',html,re.I)
+        links=re.findall(r"href=['\\"]([^'\\"]*NipponIndia-Small-Cap-Fund-MF-Factsheet-[^'\\"]*\\.pdf)['\\"]",html,re.I)
         if not links:
-            links=re.findall(r'href=["\\']([^"\\']*FundwiseFactsheet/[^"\\']+\\.pdf)["\\']',html,re.I)
+            links=re.findall(r"href=['\\"]([^'\\"]*FundwiseFactsheet/[^'\\"]+\\.pdf)['\\"]",html,re.I)
         if not links:
             links=["https://mf.nipponindiaim.com/InvestorServices/FundwiseFactsheet/NipponIndia-Small-Cap-Fund-MF-Factsheet-2026.pdf"]
         pdf_url=urllib.parse.urljoin(page,links[0])
