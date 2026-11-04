@@ -180,13 +180,9 @@ def _dsp_small_cap_metadata(result):
     try:
         regular=fetch(regular_url).decode("utf-8","replace")
         regular_text=clean(re.sub(r"<[^>]+>"," ",regular))
-        manager=re.search(r"Fund Managers?\s+([A-Z][A-Za-z .'-]{2,50})",regular_text,re.I)
+        manager=re.search(r"\b(Vinit\s+Sambre)\b",regular_text,re.I)
         if manager:
             result["managers"]=clean(manager.group(1))
-        else:
-            manager=re.search(r"\b(Vinit\s+Sambre)\b",regular_text,re.I)
-            if manager:
-                result["managers"]=manager.group(1)
     except Exception as e:
         print("DSP regular page manager lookup failed:",repr(e))
     result["source"]=direct_url
@@ -261,7 +257,7 @@ def _icici_energy_metadata(result):
         source=section.group(1) if section else page
         holdings=[]
         for ticker,name in names.items():
-            m=re.search(r"\\b"+re.escape(ticker)+r"\\b.{0,250}?(\\d{1,2}\\.\\d{1,2})\\s*%",source,re.I|re.S)
+            m=re.search(r"\b"+re.escape(ticker)+r"\\b.{0,250}?(\\d{1,2}\.\d{1,2})\s*%",source,re.I|re.S)
             if m: holdings.append((name,float(m.group(1))))
         if len(holdings)>=8:
             holdings.sort(key=lambda x:x[1],reverse=True)
@@ -329,7 +325,9 @@ def main():
     lines += ["</pre>",f"<b>AMC</b> {meta.get('fund_house') or 'Not available in MFAPI'}",f"<b>Category</b> {meta.get('scheme_category') or 'Not available in MFAPI'}",f"<b>3. Benchmark</b> {meta.get('benchmark') or 'Not available'}",
               f"<b>4. AUM</b> {meta.get('aum') or 'Not available'}",
               f"<b>5. Fund Manager</b> {meta.get('managers') or 'Not available'}",
-              "<b>6. Top 10 Holdings</b> "+((" | ".join(meta.get("holdings",[])) or "Not available")),"",
+              "<b>6. Top 10 Holdings</b>",
+              *([f"{i}. {holding}" for i,holding in enumerate(meta.get("holdings",[])[:10],1)] if meta.get("holdings") else ["Not available"]),
+              "",
               '<a href="https://www.mfapi.in/">MFAPI data source</a>',"",
               f"<i>Scheme NAV and history: MFAPI. Historical NAV through {endd:%d-%b-%Y}.</i>" if endd else "<i>MFAPI NAV source.</i>"]
     telegram_send("\n".join(lines))
