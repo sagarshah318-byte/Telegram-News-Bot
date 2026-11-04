@@ -209,7 +209,7 @@ def save_state(seen_ids):
             subprocess.run(["git", "reset", "--hard", "origin/main"], check=True)
             with open(STATE_PATH, "w", encoding="utf-8") as file:
                 json.dump({"seen_ids": merged_ids}, file, indent=2)
-                file.write("\\n")
+                file.write("\n")
             subprocess.run(["git", "add", STATE_PATH], check=True)
             staged = subprocess.run(["git", "diff", "--cached", "--quiet"])
             if staged.returncode == 1:
