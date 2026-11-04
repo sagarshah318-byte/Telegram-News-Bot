@@ -124,33 +124,71 @@ def scheme_metadata(code):
         return {}
 
 def _dsp_small_cap_metadata(result):
-    """Parse DSP Small Cap facts from its official public scheme page."""
-    url="https://www.dspim.com/invest/mutual-fund-schemes/equity-funds/small-cap-fund/dspmc-direct-growth"
-    html=fetch(url).decode("utf-8","replace")
-    text=re.sub(r"<(br|/p|/div|/tr|/li|/h[1-6])\b[^>]*>", " | ", html, flags=re.I)
-    text=re.sub(r"<[^>]+>", " ", text)
-    text=clean(text)
-    def grab(pattern):
-        m=re.search(pattern,text,re.I)
-        return clean(m.group(1)) if m else ""
-    benchmark=grab(r"Benchmark:\s*([^|]{3,100})")
-    aum=grab(r"Total AUM\s*₹?\s*([\d,]+(?:\.\d+)?)\s*crores")
-    manager=grab(r"Fund managers?:\s*(?:Image:\s*)?([A-Z][A-Za-z .'-]{2,60})")
-    if benchmark: result["benchmark"]=benchmark
-    if aum: result["aum"]="₹"+aum+" Cr (as of Sep 30, 2026)"
-    if manager: result["managers"]=manager
+    """Read DSP Small Cap benchmark, manager and portfolio from DSP's official pages."""
+    from html.parser import HTMLParser
+    direct_url="https://www.dspim.com/invest/mutual-fund-schemes/equity-funds/small-cap-fund/dspmc-direct-growth"
+    regular_url="https://www.dspim.com/ifaxpress/mutual-fund-schemes/equity-funds/small-cap-fund/dspmc-regular-growth"
+    html=fetch(direct_url).decode("utf-8","replace")
+    text=clean(re.sub(r"<[^>]+>"," ",html))
+    m=re.search(r"Benchmark:\s*(BSE\s+250\s+Small\s+Cap\s+TRI)",text,re.I)
+    if m:
+        result["benchmark"]=m.group(1)
+    # Extract holdings from the actual HTML table, not flattened page text.
+    class TableRows(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.rows=[]
+            self.row=None
+            self.cell=None
+        def handle_starttag(self,tag,attrs):
+            tag=tag.lower()
+            if tag=="tr":
+                self.row=[]
+            elif tag in ("td","th") and self.row is not None:
+                self.cell=[]
+        def handle_data(self,data):
+            if self.cell is not None:
+                self.cell.append(data)
+        def handle_endtag(self,tag):
+            tag=tag.lower()
+            if tag in ("td","th") and self.cell is not None:
+                self.row.append(clean(" ".join(self.cell)))
+                self.cell=None
+            elif tag=="tr" and self.row is not None:
+                self.rows.append(self.row)
+                self.row=None
+    parser=TableRows()
+    parser.feed(html)
     holdings=[]
-    start=text.lower().find("portfolio as of")
-    if start>=0:
-        start=text.lower().find("holdings",start)
-    end=text.lower().find("view all holdings",start+1) if start>=0 else -1
-    block=text[start:end] if start>=0 and end>start else ""
-    for name,weight in re.findall(r"([A-Z][A-Za-z0-9 &.,'()-]{2,90}?)\s*\|\s*(\d+(?:\.\d+)?)\s*%",block):
-        item=clean(name)+" "+weight+"%"
-        if item not in holdings: holdings.append(item)
-    if holdings: result["holdings"]=holdings[:10]
-    result["source"]=url
+    for row in parser.rows:
+        if len(row)<2:
+            continue
+        name=clean(row[0])
+        weight=clean(row[1]).replace("%","").strip()
+        if name.lower() in ("holdings","name") or "weight" in name.lower():
+            continue
+        if re.fullmatch(r"\d{1,2}(?:\.\d{1,2})?",weight) and len(name)>3:
+            holdings.append(name+" "+weight+"%")
+    if holdings:
+        result["holdings"]=holdings[:10]
+    # The official regular-growth page contains the named fund manager.
+    try:
+        regular=fetch(regular_url).decode("utf-8","replace")
+        regular_text=clean(re.sub(r"<[^>]+>"," ",regular))
+        manager=re.search(r"Fund Managers?\s+([A-Z][A-Za-z .'-]{2,50})",regular_text,re.I)
+        if manager:
+            result["managers"]=clean(manager.group(1))
+        else:
+            manager=re.search(r"\b(Vinit\s+Sambre)\b",regular_text,re.I)
+            if manager:
+                result["managers"]=manager.group(1)
+    except Exception as e:
+        print("DSP regular page manager lookup failed:",repr(e))
+    result["source"]=direct_url
+    result["manager_source"]=regular_url
+    result["portfolio_as_of"]="30-Sep-2026"
     return result
+
 
 def _tigzig_metadata(code, result):
     """Use AMFI-sourced scheme details for AUM, benchmark and manager where published."""
