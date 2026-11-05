@@ -1,5 +1,8 @@
 {
-  "active_opportunities": [],
-  "last_checked_ist": "2026-11-04T17:23:48+05:30",
+  "active_opportunities": [
+    "D1:DATAPATTNS",
+    "D2:DATAPATTNS"
+  ],
+  "last_checked_ist": "2026-11-05T17:01:07+05:30",
   "threshold_percent": 3.0
 }
