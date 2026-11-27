@@ -1,5 +1,7 @@
 {
-  "active_opportunities": [],
-  "last_checked_ist": "2026-11-26T19:06:50+05:30",
+  "active_opportunities": [
+    "X2:ACUTAAS"
+  ],
+  "last_checked_ist": "2026-11-27T18:38:17+05:30",
   "threshold_percent": 3.0
 }
